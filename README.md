@@ -66,3 +66,6 @@ Visit `http://localhost:3000` to sign in with Google; authenticated users are re
 - Notes dashboard (list/create/rename/delete + search).
 - tldraw editor with autosave, offline restore, undo/redo, export.
 - Thumbnails + storage uploads to `note-assets`.
+
+## FYI
+Currently very glitchy (WIP).
