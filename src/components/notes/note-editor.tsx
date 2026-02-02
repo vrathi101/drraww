@@ -34,6 +34,7 @@ type NoteEditorProps = {
 
 const AUTOSAVE_DEBOUNCE_MS = 1200;
 const AUTOSAVE_HEARTBEAT_MS = 20000;
+const REVISION_HEARTBEAT_MS = 30000;
 
 export function NoteEditor({
   noteId,
@@ -182,6 +183,7 @@ function EditorShell({
   const hasDirtyChangesRef = useRef(false);
   const baseUpdatedAtRef = useRef<string | null>(initialUpdatedAt);
   const lastThumbnailMsRef = useRef(0);
+  const lastRevisionMsRef = useRef(0);
   const localKey = useMemo(() => `note:${noteId}:snapshot`, [noteId]);
   const initialUpdatedAtMs = useMemo(
     () => new Date(initialUpdatedAt).getTime() || 0,
@@ -191,6 +193,13 @@ function EditorShell({
     () => process.env.NEXT_PUBLIC_SUPABASE_ASSETS_BUCKET || "note-assets",
     [],
   );
+  const [localDraft, setLocalDraft] = useState<
+    | {
+        snapshot: TLEditorSnapshot | TLStoreSnapshot;
+        updatedAt: number;
+      }
+    | null
+  >(null);
 
   const emitSaveStatus = useCallback(
     (status: SaveState, savedAt?: number) => {
@@ -219,25 +228,30 @@ function EditorShell({
     [localKey],
   );
 
-  const restoreLocalIfNewer = useCallback(
-    (editor: Editor) => {
-      try {
-        const raw = localStorage.getItem(localKey);
-        if (!raw) return;
-        const parsed = JSON.parse(raw) as {
-          snapshot?: TLEditorSnapshot | TLStoreSnapshot;
-          updatedAt?: number;
-        };
-        if (!parsed?.snapshot || !parsed.updatedAt) return;
-        if (parsed.updatedAt > initialUpdatedAtMs) {
-          editor.loadSnapshot(parsed.snapshot);
-        }
-      } catch {
-        // ignore parsing issues
-      }
-    },
-    [initialUpdatedAtMs, localKey],
-  );
+  const readLocalDraft = useCallback(() => {
+    try {
+      const raw = localStorage.getItem(localKey);
+      if (!raw) return null;
+      const parsed = JSON.parse(raw) as {
+        snapshot?: TLEditorSnapshot | TLStoreSnapshot;
+        updatedAt?: number;
+      };
+      if (!parsed?.snapshot || !parsed.updatedAt) return null;
+      return parsed as {
+        snapshot: TLEditorSnapshot | TLStoreSnapshot;
+        updatedAt: number;
+      };
+    } catch {
+      return null;
+    }
+  }, [localKey]);
+
+  const restoreLocalIfNewer = useCallback(() => {
+    const draft = readLocalDraft();
+    if (draft && draft.updatedAt > initialUpdatedAtMs) {
+      setLocalDraft(draft);
+    }
+  }, [initialUpdatedAtMs, readLocalDraft]);
 
   const uploadThumbnail = useCallback(async () => {
     const editor = editorRef.current;
@@ -271,6 +285,42 @@ function EditorShell({
       console.warn("Thumbnail upload failed", err);
     }
   }, [bucket, noteId, session?.user, supabase]);
+
+  const insertRevision = useCallback(
+    async (snapshot: TLEditorSnapshot | TLStoreSnapshot, reason = "autosave") => {
+      try {
+        const now = Date.now();
+        if (now - lastRevisionMsRef.current < REVISION_HEARTBEAT_MS) return;
+        const { error } = await supabase.from("note_revisions").insert({
+          note_id: noteId,
+          owner_id: session?.user?.id,
+          doc: snapshot,
+          reason,
+        });
+        if (error) throw error;
+        lastRevisionMsRef.current = now;
+
+        const { data: idsToDelete, error: listError } = await supabase
+          .from("note_revisions")
+          .select("id")
+          .eq("note_id", noteId)
+          .order("created_at", { ascending: false })
+          .range(20, 200);
+        if (!listError && idsToDelete && idsToDelete.length > 0) {
+          await supabase
+            .from("note_revisions")
+            .delete()
+            .in(
+              "id",
+              idsToDelete.map((row) => row.id),
+            );
+        }
+      } catch (err) {
+        console.warn("Revision insert failed", err);
+      }
+    },
+    [noteId, session?.user?.id, supabase],
+  );
 
   const saveNow = useCallback(async () => {
     const editor = editorRef.current;
@@ -308,6 +358,7 @@ function EditorShell({
       const savedAt = Date.now();
       emitSaveStatus("saved", savedAt);
       uploadThumbnail();
+      insertRevision(snapshot);
     } catch (err) {
       if (!navigator.onLine) {
         emitSaveStatus("offline");
@@ -316,7 +367,7 @@ function EditorShell({
         emitSaveStatus("error");
       }
     }
-  }, [emitSaveStatus, noteId, persistLocal, supabase, uploadThumbnail]);
+  }, [emitSaveStatus, insertRevision, noteId, persistLocal, supabase, uploadThumbnail]);
 
   const scheduleSave = useCallback(() => {
     hasDirtyChangesRef.current = true;
@@ -336,7 +387,7 @@ function EditorShell({
         editor.loadSnapshot(initialSnapshot, { forceOverwriteSessionState: true });
       }
 
-      restoreLocalIfNewer(editor);
+      restoreLocalIfNewer();
       persistLocal(editor.getSnapshot());
       emitSaveStatus("saved", Date.now());
 
@@ -382,6 +433,22 @@ function EditorShell({
     }
   }, [emitSaveStatus]);
 
+  const handleRestoreLocalDraft = useCallback(() => {
+    if (!localDraft || !editorRef.current) return;
+    editorRef.current.loadSnapshot(localDraft.snapshot, { forceOverwriteSessionState: true });
+    persistLocal(editorRef.current.getSnapshot());
+    setLocalDraft(null);
+  }, [localDraft, persistLocal]);
+
+  const handleDiscardLocalDraft = useCallback(() => {
+    try {
+      localStorage.removeItem(localKey);
+    } catch {
+      // ignore
+    }
+    setLocalDraft(null);
+  }, [localKey]);
+
   return (
     <>
       <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50 px-4 py-2">
@@ -396,6 +463,30 @@ function EditorShell({
           </button>
         </div>
       </div>
+      {localDraft ? (
+        <div className="flex items-center justify-between gap-3 border-b border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-800">
+          <div className="flex items-center gap-2">
+            <span className="h-2 w-2 rounded-full bg-amber-500" aria-hidden />
+            Unsynced local changes detected from a previous session. Restore?
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              className="rounded-full border border-amber-200 bg-white px-3 py-1 text-xs font-semibold text-amber-800 hover:border-amber-300"
+              onClick={handleRestoreLocalDraft}
+            >
+              Restore
+            </button>
+            <button
+              type="button"
+              className="rounded-full border border-transparent px-3 py-1 text-xs font-medium text-amber-700 hover:underline"
+              onClick={handleDiscardLocalDraft}
+            >
+              Dismiss
+            </button>
+          </div>
+        </div>
+      ) : null}
       <div className="relative h-[70vh] w-full">
         <Tldraw
           persistenceKey={localKey}
