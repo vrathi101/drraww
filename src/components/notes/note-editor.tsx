@@ -17,6 +17,7 @@ import {
   useState,
   useTransition,
 } from "react";
+import { PDFDocument } from "pdf-lib";
 import "tldraw/tldraw.css";
 
 const Tldraw = dynamic(() => import("tldraw").then((mod) => mod.Tldraw), {
@@ -35,6 +36,13 @@ type NoteEditorProps = {
 const AUTOSAVE_DEBOUNCE_MS = 1200;
 const AUTOSAVE_HEARTBEAT_MS = 20000;
 const REVISION_HEARTBEAT_MS = 30000;
+
+type Revision = {
+  id: string;
+  created_at: string;
+  reason: string | null;
+  doc: TLEditorSnapshot | TLStoreSnapshot;
+};
 
 export function NoteEditor({
   noteId,
@@ -184,6 +192,8 @@ function EditorShell({
   const baseUpdatedAtRef = useRef<string | null>(initialUpdatedAt);
   const lastThumbnailMsRef = useRef(0);
   const lastRevisionMsRef = useRef(0);
+  const [saveStatus, setSaveStatus] = useState<SaveState>("saved");
+  const [isOnline, setIsOnline] = useState(true);
   const localKey = useMemo(() => `note:${noteId}:snapshot`, [noteId]);
   const initialUpdatedAtMs = useMemo(
     () => new Date(initialUpdatedAt).getTime() || 0,
@@ -200,9 +210,13 @@ function EditorShell({
       }
     | null
   >(null);
+  const [revisions, setRevisions] = useState<Revision[]>([]);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [historyLoading, setHistoryLoading] = useState(false);
 
   const emitSaveStatus = useCallback(
     (status: SaveState, savedAt?: number) => {
+      setSaveStatus(status);
       const event = new CustomEvent(`note-save:${localKey}`, {
         detail: { status, savedAt },
       });
@@ -285,6 +299,23 @@ function EditorShell({
       console.warn("Thumbnail upload failed", err);
     }
   }, [bucket, noteId, session?.user, supabase]);
+
+  const fetchRevisions = useCallback(async () => {
+    setHistoryLoading(true);
+    const { data, error } = await supabase
+      .from("note_revisions")
+      .select("id, created_at, reason, doc")
+      .eq("note_id", noteId)
+      .order("created_at", { ascending: false })
+      .limit(10);
+    if (error) {
+      console.warn("Failed to load revisions", error.message);
+      setRevisions([]);
+    } else {
+      setRevisions((data as Revision[]) ?? []);
+    }
+    setHistoryLoading(false);
+  }, [noteId, supabase]);
 
   const insertRevision = useCallback(
     async (snapshot: TLEditorSnapshot | TLStoreSnapshot, reason = "autosave") => {
@@ -433,6 +464,37 @@ function EditorShell({
     }
   }, [emitSaveStatus]);
 
+  const handleExportPdf = useCallback(async () => {
+    const editor = editorRef.current;
+    if (!editor) return;
+    emitSaveStatus("saving");
+    try {
+      const { blob, width, height } = await editor.toImage([], {
+        format: "png",
+        background: true,
+        padding: 32,
+        scale: 2,
+      });
+      const pngBytes = await blob.arrayBuffer();
+      const pdfDoc = await PDFDocument.create();
+      const pngImage = await pdfDoc.embedPng(pngBytes);
+      const page = pdfDoc.addPage([width, height]);
+      page.drawImage(pngImage, { x: 0, y: 0, width, height });
+      const pdfBytes = await pdfDoc.save();
+      const pdfBlob = new Blob([pdfBytes], { type: "application/pdf" });
+      const url = URL.createObjectURL(pdfBlob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "note.pdf";
+      a.click();
+      URL.revokeObjectURL(url);
+      emitSaveStatus("saved", Date.now());
+    } catch (err) {
+      console.error("Export PDF failed", err);
+      emitSaveStatus("error");
+    }
+  }, [emitSaveStatus]);
+
   const handleRestoreLocalDraft = useCallback(() => {
     if (!localDraft || !editorRef.current) return;
     editorRef.current.loadSnapshot(localDraft.snapshot, { forceOverwriteSessionState: true });
@@ -449,6 +511,35 @@ function EditorShell({
     setLocalDraft(null);
   }, [localKey]);
 
+  const handleRestoreRevision = useCallback(
+    async (revision: Revision) => {
+      if (!editorRef.current) return;
+      editorRef.current.loadSnapshot(revision.doc, { forceOverwriteSessionState: true });
+      persistLocal(editorRef.current.getSnapshot());
+      hasDirtyChangesRef.current = true;
+      await saveNow();
+      setHistoryOpen(false);
+    },
+    [persistLocal, saveNow],
+  );
+
+  useEffect(() => {
+    const updateOnline = () => setIsOnline(navigator.onLine);
+    updateOnline();
+    window.addEventListener("online", updateOnline);
+    window.addEventListener("offline", updateOnline);
+    return () => {
+      window.removeEventListener("online", updateOnline);
+      window.removeEventListener("offline", updateOnline);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (historyOpen && revisions.length === 0) {
+      fetchRevisions();
+    }
+  }, [fetchRevisions, historyOpen, revisions.length]);
+
   return (
     <>
       <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50 px-4 py-2">
@@ -461,6 +552,29 @@ function EditorShell({
           >
             Export PNG
           </button>
+          <button
+            type="button"
+            onClick={handleExportPdf}
+            className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-800 shadow-sm hover:border-slate-300"
+          >
+            Export PDF
+          </button>
+          <button
+            type="button"
+            onClick={() => setHistoryOpen((v) => !v)}
+            className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-800 shadow-sm hover:border-slate-300"
+          >
+            {historyOpen ? "Close History" : "History"}
+          </button>
+          {!isOnline || saveStatus === "offline" || saveStatus === "error" ? (
+            <button
+              type="button"
+              onClick={() => saveNow()}
+              className="rounded-full border border-rose-200 bg-rose-50 px-3 py-1.5 text-xs font-semibold text-rose-700 shadow-sm hover:border-rose-300"
+            >
+              Retry save
+            </button>
+          ) : null}
         </div>
       </div>
       {localDraft ? (
@@ -485,6 +599,48 @@ function EditorShell({
               Dismiss
             </button>
           </div>
+        </div>
+      ) : null}
+      {!isOnline ? (
+        <div className="flex items-center gap-2 border-b border-slate-200 bg-slate-100 px-4 py-2 text-sm text-slate-700">
+          <span className="h-2 w-2 rounded-full bg-rose-500" aria-hidden />
+          You are offline. Edits stay local; they will sync when back online.
+        </div>
+      ) : null}
+      {historyOpen ? (
+        <div className="border-b border-slate-200 bg-slate-50 px-4 py-3 text-sm">
+          <div className="mb-2 flex items-center justify-between">
+            <div className="font-semibold text-slate-800">Revisions (last 10)</div>
+            <button
+              type="button"
+              onClick={fetchRevisions}
+              className="rounded-full border border-slate-200 bg-white px-2 py-1 text-xs font-medium text-slate-700 hover:border-slate-300"
+              disabled={historyLoading}
+            >
+              {historyLoading ? "Loading..." : "Refresh"}
+            </button>
+          </div>
+          {revisions.length === 0 ? (
+            <div className="text-slate-600">No revisions yet.</div>
+          ) : (
+            <div className="flex flex-wrap gap-2">
+              {revisions.map((rev) => (
+                <button
+                  key={rev.id}
+                  type="button"
+                  onClick={() => handleRestoreRevision(rev)}
+                  className="flex flex-col items-start gap-1 rounded-xl border border-slate-200 bg-white px-3 py-2 text-left shadow-sm hover:border-slate-300"
+                >
+                  <span className="text-xs font-semibold text-slate-800">
+                    {new Date(rev.created_at).toLocaleString()}
+                  </span>
+                  <span className="text-xs text-slate-600">
+                    {rev.reason || "Autosave checkpoint"}
+                  </span>
+                </button>
+              ))}
+            </div>
+          )}
         </div>
       ) : null}
       <div className="relative h-[70vh] w-full">
