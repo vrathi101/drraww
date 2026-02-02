@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import localFont from "next/font/local";
 import "./globals.css";
+import "tldraw/tldraw.css";
 import { SupabaseProvider } from "@/components/supabase-provider";
 import { getServerSession } from "@/lib/supabase/server";
 

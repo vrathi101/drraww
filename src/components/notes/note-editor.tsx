@@ -46,7 +46,7 @@ export function NoteEditor({
           <SaveIndicator noteId={noteId} />
         </div>
       </header>
-      <div className="flex min-h-[70vh] flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-md">
+      <div className="flex min-h-[75vh] flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-md">
         <EditorShell
           noteId={noteId}
           initialSnapshot={snapshot}
@@ -327,7 +327,7 @@ function EditorShell({
           </button>
         </div>
       </div>
-      <div className="relative flex-1">
+      <div className="relative h-[70vh] w-full">
         <Tldraw
           persistenceKey={localKey}
           onMount={handleMount}
