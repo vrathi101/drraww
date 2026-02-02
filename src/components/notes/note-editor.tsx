@@ -2,10 +2,21 @@
 
 import { renameNoteAction } from "@/app/app/actions";
 import { useSupabase } from "@/components/supabase-provider";
-import { type Editor, type TLEditorSnapshot, type TLStoreSnapshot } from "tldraw";
+import {
+  type Editor,
+  type TLEditorSnapshot,
+  type TLStoreSnapshot,
+} from "tldraw";
 import dynamic from "next/dynamic";
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useTransition,
+} from "react";
 import "tldraw/tldraw.css";
 
 const Tldraw = dynamic(() => import("tldraw").then((mod) => mod.Tldraw), {
@@ -164,15 +175,21 @@ function EditorShell({
   initialSnapshot?: TLEditorSnapshot | TLStoreSnapshot;
   initialUpdatedAt: string;
 }) {
-  const { supabase } = useSupabase();
+  const { supabase, session } = useSupabase();
   const editorRef = useRef<Editor | null>(null);
   const debouncedSaveRef = useRef<NodeJS.Timeout | null>(null);
   const heartbeatRef = useRef<NodeJS.Timeout | null>(null);
   const hasDirtyChangesRef = useRef(false);
+  const baseUpdatedAtRef = useRef<string | null>(initialUpdatedAt);
+  const lastThumbnailMsRef = useRef(0);
   const localKey = useMemo(() => `note:${noteId}:snapshot`, [noteId]);
   const initialUpdatedAtMs = useMemo(
     () => new Date(initialUpdatedAt).getTime() || 0,
     [initialUpdatedAt],
+  );
+  const bucket = useMemo(
+    () => process.env.NEXT_PUBLIC_SUPABASE_ASSETS_BUCKET || "note-assets",
+    [],
   );
 
   const emitSaveStatus = useCallback(
@@ -222,6 +239,39 @@ function EditorShell({
     [initialUpdatedAtMs, localKey],
   );
 
+  const uploadThumbnail = useCallback(async () => {
+    const editor = editorRef.current;
+    if (!editor || !session?.user) return;
+
+    const now = Date.now();
+    if (now - lastThumbnailMsRef.current < 20000) return;
+
+    try {
+      const { blob } = await editor.toImage([], {
+        format: "png",
+        background: true,
+        padding: 32,
+        scale: 1,
+      });
+      const path = `${session.user.id}/${noteId}/thumbnail.png`;
+      const { error: uploadError } = await supabase.storage
+        .from(bucket)
+        .upload(path, blob, {
+          cacheControl: "3600",
+          upsert: true,
+          contentType: "image/png",
+        });
+      if (uploadError) throw uploadError;
+      await supabase
+        .from("notes")
+        .update({ thumbnail_path: path })
+        .eq("id", noteId);
+      lastThumbnailMsRef.current = now;
+    } catch (err) {
+      console.warn("Thumbnail upload failed", err);
+    }
+  }, [bucket, noteId, session?.user, supabase]);
+
   const saveNow = useCallback(async () => {
     const editor = editorRef.current;
     if (!editor) return;
@@ -231,14 +281,24 @@ function EditorShell({
     emitSaveStatus("saving");
 
     try {
-      const { error } = await supabase
+      const query = supabase
         .from("notes")
         .update({ doc: snapshot })
         .eq("id", noteId);
-      if (error) throw error;
+      if (baseUpdatedAtRef.current) {
+        query.eq("updated_at", baseUpdatedAtRef.current);
+      }
+      const { data, error, status } = await query.select("updated_at").single();
+      if (error || status === 409) {
+        throw error || new Error("Conflict saving note");
+      }
+      if (data?.updated_at) {
+        baseUpdatedAtRef.current = data.updated_at;
+      }
       hasDirtyChangesRef.current = false;
       const savedAt = Date.now();
       emitSaveStatus("saved", savedAt);
+      uploadThumbnail();
     } catch (err) {
       if (!navigator.onLine) {
         emitSaveStatus("offline");
@@ -247,7 +307,7 @@ function EditorShell({
         emitSaveStatus("error");
       }
     }
-  }, [emitSaveStatus, noteId, persistLocal, supabase]);
+  }, [emitSaveStatus, noteId, persistLocal, supabase, uploadThumbnail]);
 
   const scheduleSave = useCallback(() => {
     hasDirtyChangesRef.current = true;
