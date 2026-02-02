@@ -5,9 +5,10 @@ import {
   deleteNoteAction,
   renameNoteAction,
 } from "@/app/app/actions";
+import { useSupabase } from "@/components/supabase-provider";
 import type { Note } from "@/lib/notes";
 import Link from "next/link";
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 
 type Props = {
@@ -16,14 +17,53 @@ type Props = {
 
 export function NotesDashboard({ notes }: Props) {
   const router = useRouter();
+  const { supabase } = useSupabase();
   const [search, setSearch] = useState("");
   const [isPending, startTransition] = useTransition();
+  const [thumbnails, setThumbnails] = useState<Record<string, string>>({});
 
   const filtered = useMemo(() => {
     const term = search.trim().toLowerCase();
     if (!term) return notes;
     return notes.filter((note) => note.title.toLowerCase().includes(term));
   }, [notes, search]);
+
+  useEffect(() => {
+    const bucket =
+      process.env.NEXT_PUBLIC_SUPABASE_ASSETS_BUCKET || "note-assets";
+    const paths = notes
+      .map((note) => note.thumbnail_path)
+      .filter((p): p is string => Boolean(p));
+    if (paths.length === 0) {
+      setThumbnails({});
+      return;
+    }
+
+    let isMounted = true;
+
+    supabase.storage
+      .from(bucket)
+      .createSignedUrls(paths, 3600)
+      .then(({ data, error }) => {
+        if (!isMounted) return;
+        if (error || !data) {
+          console.warn("Failed to load thumbnails", error?.message);
+          setThumbnails({});
+          return;
+        }
+        const map: Record<string, string> = {};
+        data.forEach((item) => {
+          if (item.signedUrl && item.path) {
+            map[item.path] = item.signedUrl;
+          }
+        });
+        setThumbnails(map);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [notes, supabase.storage]);
 
   const handleCreate = () => {
     startTransition(async () => {
@@ -105,46 +145,65 @@ export function NotesDashboard({ notes }: Props) {
           {filtered.map((note) => (
             <article
               key={note.id}
-              className="group flex h-full flex-col justify-between rounded-2xl border border-slate-200 bg-white/90 p-4 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
+              className="group flex h-full flex-col justify-between overflow-hidden rounded-2xl border border-slate-200 bg-white/90 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
             >
-              <div className="flex items-start justify-between gap-3">
-                <div className="space-y-1">
-                  <h2 className="line-clamp-2 text-lg font-semibold text-slate-900">
-                    {note.title || "Untitled"}
-                  </h2>
-                  <p className="text-xs text-slate-500">
-                    Updated {formatUpdatedAt(note.updated_at)}
-                  </p>
+              <Link href={`/app/note/${note.id}`} className="block">
+                <div className="relative aspect-[4/3] w-full overflow-hidden bg-slate-100">
+                  {thumbnails[note.thumbnail_path ?? ""] ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={thumbnails[note.thumbnail_path ?? ""]}
+                      alt={`${note.title} thumbnail`}
+                      className="h-full w-full object-cover transition duration-200 group-hover:scale-[1.01]"
+                      loading="lazy"
+                    />
+                  ) : (
+                    <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-amber-50 via-white to-sky-50 text-sm font-medium text-slate-500">
+                      No preview yet
+                    </div>
+                  )}
                 </div>
-                <div className="flex items-center gap-2 opacity-0 transition group-hover:opacity-100">
-                  <button
-                    type="button"
-                    onClick={() => handleRename(note)}
-                    className="rounded-full border border-slate-200 px-3 py-1 text-xs font-medium text-slate-700 hover:border-slate-400"
-                    disabled={isPending}
-                  >
-                    Rename
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleDelete(note)}
-                    className="rounded-full border border-rose-200 px-3 py-1 text-xs font-semibold text-rose-700 hover:border-rose-400"
-                    disabled={isPending}
-                  >
-                    Delete
-                  </button>
+              </Link>
+              <div className="flex flex-1 flex-col gap-3 px-4 py-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="space-y-1">
+                    <h2 className="line-clamp-1 text-lg font-semibold text-slate-900">
+                      {note.title || "Untitled"}
+                    </h2>
+                    <p className="text-xs text-slate-500">
+                      Updated {formatUpdatedAt(note.updated_at)}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2 opacity-0 transition group-hover:opacity-100">
+                    <button
+                      type="button"
+                      onClick={() => handleRename(note)}
+                      className="rounded-full border border-slate-200 px-3 py-1 text-xs font-medium text-slate-700 hover:border-slate-400"
+                      disabled={isPending}
+                    >
+                      Rename
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleDelete(note)}
+                      className="rounded-full border border-rose-200 px-3 py-1 text-xs font-semibold text-rose-700 hover:border-rose-400"
+                      disabled={isPending}
+                    >
+                      Delete
+                    </button>
+                  </div>
                 </div>
-              </div>
-              <div className="mt-6 flex items-center justify-between gap-3">
-                <Link
-                  href={`/app/note/${note.id}`}
-                  className="inline-flex items-center gap-2 text-sm font-semibold text-amber-700 hover:text-amber-800"
-                >
-                  Open note →
-                </Link>
-                {isPending ? (
-                  <span className="text-xs text-slate-500">Working...</span>
-                ) : null}
+                <div className="mt-auto flex items-center justify-between gap-3">
+                  <Link
+                    href={`/app/note/${note.id}`}
+                    className="inline-flex items-center gap-2 text-sm font-semibold text-amber-700 hover:text-amber-800"
+                  >
+                    Open note →
+                  </Link>
+                  {isPending ? (
+                    <span className="text-xs text-slate-500">Working...</span>
+                  ) : null}
+                </div>
               </div>
             </article>
           ))}
