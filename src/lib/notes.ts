@@ -31,7 +31,7 @@ export async function listNotes(): Promise<Note[]> {
     throw new Error(`Failed to load notes: ${error.message}`);
   }
 
-  return data ?? [];
+  return (data as Note[] | null) ?? [];
 }
 
 export async function createNote(title = "Untitled"): Promise<string> {
@@ -98,5 +98,5 @@ export async function getNote(noteId: string): Promise<Note> {
     notFound();
   }
 
-  return data;
+  return data as Note;
 }

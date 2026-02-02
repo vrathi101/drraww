@@ -7,6 +7,7 @@ import {
   type TLEditorSnapshot,
   type TLStoreSnapshot,
 } from "tldraw";
+import type { Json } from "@/lib/database.types";
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import {
@@ -41,7 +42,7 @@ type Revision = {
   id: string;
   created_at: string;
   reason: string | null;
-  doc: TLEditorSnapshot | TLStoreSnapshot;
+  doc: TLEditorSnapshot | TLStoreSnapshot | null;
 };
 
 export function NoteEditor({
@@ -312,7 +313,12 @@ function EditorShell({
       console.warn("Failed to load revisions", error.message);
       setRevisions([]);
     } else {
-      setRevisions((data as Revision[]) ?? []);
+      const mapped =
+        data?.map((row) => ({
+          ...row,
+          doc: coerceSnapshot(row.doc) ?? null,
+        })) ?? [];
+      setRevisions(mapped);
     }
     setHistoryLoading(false);
   }, [noteId, supabase]);
@@ -320,14 +326,17 @@ function EditorShell({
   const insertRevision = useCallback(
     async (snapshot: TLEditorSnapshot | TLStoreSnapshot, reason = "autosave") => {
       try {
+        if (!session?.user?.id) return;
         const now = Date.now();
         if (now - lastRevisionMsRef.current < REVISION_HEARTBEAT_MS) return;
-        const { error } = await supabase.from("note_revisions").insert({
-          note_id: noteId,
-          owner_id: session?.user?.id,
-          doc: snapshot,
-          reason,
-        });
+        const { error } = await supabase.from("note_revisions").insert([
+          {
+            note_id: noteId,
+            owner_id: session.user.id,
+            doc: snapshot as unknown as Json,
+            reason,
+          },
+        ]);
         if (error) throw error;
         lastRevisionMsRef.current = now;
 
@@ -364,7 +373,7 @@ function EditorShell({
     try {
       const query = supabase
         .from("notes")
-        .update({ doc: snapshot })
+        .update({ doc: snapshot as unknown as Json })
         .eq("id", noteId);
       if (baseUpdatedAtRef.current) {
         query.eq("updated_at", baseUpdatedAtRef.current);
@@ -374,7 +383,7 @@ function EditorShell({
         // Fallback: last-write-wins update if optimistic check failed.
         const { data: overwriteData, error: overwriteError } = await supabase
           .from("notes")
-          .update({ doc: snapshot })
+          .update({ doc: snapshot as unknown as Json })
           .eq("id", noteId)
           .select("updated_at")
           .single();
@@ -481,7 +490,7 @@ function EditorShell({
       const page = pdfDoc.addPage([width, height]);
       page.drawImage(pngImage, { x: 0, y: 0, width, height });
       const pdfBytes = await pdfDoc.save();
-      const pdfBlob = new Blob([pdfBytes], { type: "application/pdf" });
+      const pdfBlob = new Blob([new Uint8Array(pdfBytes)], { type: "application/pdf" });
       const url = URL.createObjectURL(pdfBlob);
       const a = document.createElement("a");
       a.href = url;
@@ -513,7 +522,7 @@ function EditorShell({
 
   const handleRestoreRevision = useCallback(
     async (revision: Revision) => {
-      if (!editorRef.current) return;
+      if (!editorRef.current || !revision.doc) return;
       editorRef.current.loadSnapshot(revision.doc, { forceOverwriteSessionState: true });
       persistLocal(editorRef.current.getSnapshot());
       hasDirtyChangesRef.current = true;
