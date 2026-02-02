@@ -14,6 +14,7 @@
   "dependencies": {
     "@supabase/ssr": "^0.8.0",
     "@supabase/supabase-js": "^2.93.3",
+    "@tldraw/tldraw": "^4.3.1",
     "next": "14.2.9",
     "react": "^18",
     "react-dom": "^18"
