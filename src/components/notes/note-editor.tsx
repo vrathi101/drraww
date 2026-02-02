@@ -288,11 +288,20 @@ function EditorShell({
       if (baseUpdatedAtRef.current) {
         query.eq("updated_at", baseUpdatedAtRef.current);
       }
-      const { data, error, status } = await query.select("updated_at").single();
-      if (error || status === 409) {
-        throw error || new Error("Conflict saving note");
-      }
-      if (data?.updated_at) {
+      const { data, error } = await query.select("updated_at").maybeSingle();
+      if (error || !data?.updated_at) {
+        // Fallback: last-write-wins update if optimistic check failed.
+        const { data: overwriteData, error: overwriteError } = await supabase
+          .from("notes")
+          .update({ doc: snapshot })
+          .eq("id", noteId)
+          .select("updated_at")
+          .single();
+        if (overwriteError || !overwriteData?.updated_at) {
+          throw overwriteError || new Error("Failed to save note");
+        }
+        baseUpdatedAtRef.current = overwriteData.updated_at;
+      } else {
         baseUpdatedAtRef.current = data.updated_at;
       }
       hasDirtyChangesRef.current = false;
