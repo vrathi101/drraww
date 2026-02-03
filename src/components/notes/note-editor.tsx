@@ -210,6 +210,7 @@ function EditorShell({
   const [isUploading, setIsUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const [isDragOver, setIsDragOver] = useState(false);
   const localKey = useMemo(() => `note:${noteId}:snapshot`, [noteId]);
   const initialUpdatedAtMs = useMemo(
     () => new Date(initialUpdatedAt).getTime() || 0,
@@ -444,6 +445,19 @@ function EditorShell({
       }
     },
     [bucket, noteId, supabase.storage],
+  );
+
+  const handleFileDrop = useCallback(
+    (files: FileList | null) => {
+      if (!files || files.length === 0) return;
+      const first = files[0];
+      if (!first.type.startsWith("image/")) {
+        setUploadError("Only image uploads are supported.");
+        return;
+      }
+      handleInsertImage(first);
+    },
+    [handleInsertImage],
   );
 
   const saveNow = useCallback(async () => {
@@ -908,7 +922,29 @@ function EditorShell({
           </div>
         </div>
       ) : null}
-      <div className="relative h-[70vh] w-full">
+      <div
+        className="relative h-[70vh] w-full"
+        onDragOver={(e) => {
+          if (e.dataTransfer.types.includes("Files")) {
+            e.preventDefault();
+            setIsDragOver(true);
+          }
+        }}
+        onDragLeave={(e) => {
+          e.preventDefault();
+          setIsDragOver(false);
+        }}
+        onDrop={(e) => {
+          e.preventDefault();
+          setIsDragOver(false);
+          handleFileDrop(e.dataTransfer.files);
+        }}
+      >
+        {isDragOver ? (
+          <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center rounded-2xl border-2 border-amber-400 bg-amber-50/80 text-sm font-semibold text-amber-800">
+            Drop image to upload
+          </div>
+        ) : null}
         <Tldraw
           persistenceKey={localKey}
           onMount={handleMount}
