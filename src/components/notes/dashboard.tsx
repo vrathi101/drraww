@@ -9,6 +9,7 @@ import {
   renameNoteAction,
   renameFolderAction,
   togglePinNoteAction,
+  archiveNoteAction,
 } from "@/app/app/actions";
 import { useSupabase } from "@/components/supabase-provider";
 import type { Folder, Note } from "@/lib/notes";
@@ -120,6 +121,16 @@ export function NotesDashboard({ notes, folders }: Props) {
 
     startTransition(async () => {
       await deleteNoteAction(note.id);
+      router.refresh();
+    });
+  };
+
+  const handleArchive = (note: Note) => {
+    const ok = confirm(`Archive "${note.title}"? It will be hidden from the main list.`);
+    if (!ok) return;
+    startTransition(async () => {
+      await archiveNoteAction(note.id);
+      setToast({ type: "success", message: "Note archived" });
       router.refresh();
     });
   };
@@ -313,11 +324,11 @@ export function NotesDashboard({ notes, folders }: Props) {
                       {note.is_pinned ? "Pinned" : ""}
                     </div>
                   </div>
-                  <div className="flex items-center gap-2 opacity-0 transition group-hover:opacity-100">
-                    <button
-                      type="button"
-                      onClick={() => handleRename(note)}
-                      className="rounded-full border border-slate-200 px-3 py-1 text-xs font-medium text-slate-700 hover:border-slate-400"
+                    <div className="flex items-center gap-2 opacity-0 transition group-hover:opacity-100">
+                      <button
+                        type="button"
+                        onClick={() => handleRename(note)}
+                        className="rounded-full border border-slate-200 px-3 py-1 text-xs font-medium text-slate-700 hover:border-slate-400"
                         disabled={isPending}
                       >
                         Rename
@@ -328,13 +339,21 @@ export function NotesDashboard({ notes, folders }: Props) {
                         className="rounded-full border border-rose-200 px-3 py-1 text-xs font-semibold text-rose-700 hover:border-rose-400"
                         disabled={isPending}
                     >
-                      Delete
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        startTransition(async () => {
-                          await togglePinNoteAction(note.id, !note.is_pinned);
+                        Delete
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleArchive(note)}
+                        className="rounded-full border border-slate-200 px-3 py-1 text-xs font-medium text-slate-700 hover:border-slate-400"
+                        disabled={isPending}
+                      >
+                        Archive
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          startTransition(async () => {
+                            await togglePinNoteAction(note.id, !note.is_pinned);
                           setToast({
                             type: "success",
                             message: note.is_pinned ? "Unpinned" : "Pinned",

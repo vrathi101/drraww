@@ -222,8 +222,33 @@ export async function restoreNote(noteId: string) {
 
   const { error } = await supabase
     .from("notes")
-    .update({ is_deleted: false, deleted_at: null })
+    .update({ is_deleted: false, deleted_at: null, archived_at: null })
     .eq("id", noteId)
     .eq("owner_id", user.id);
   if (error) throw new Error(`Failed to restore note: ${error.message}`);
+}
+
+export async function archiveNote(noteId: string) {
+  const { supabase, user } = await getUserIdOrRedirect();
+  const { error } = await supabase
+    .from("notes")
+    .update({ archived_at: new Date().toISOString() })
+    .eq("id", noteId)
+    .eq("owner_id", user.id);
+  if (error) throw new Error(`Failed to archive note: ${error.message}`);
+}
+
+export async function getArchivedNotes(): Promise<Note[]> {
+  const { supabase, user } = await getUserIdOrRedirect();
+  const { data, error } = await supabase
+    .from("notes")
+    .select("*")
+    .eq("owner_id", user.id)
+    .eq("is_deleted", false)
+    .not("archived_at", "is", null)
+    .order("archived_at", { ascending: false });
+  if (error) {
+    throw new Error(`Failed to load archived notes: ${error.message}`);
+  }
+  return (data as Note[] | null) ?? [];
 }
