@@ -18,6 +18,8 @@ export interface Database {
           is_pinned: boolean;
           owner_id: string;
           folder_id: string | null;
+          deleted_at: string | null;
+          archived_at: string | null;
           pinned_at: string | null;
           thumbnail_path: string | null;
           title: string;
@@ -31,6 +33,8 @@ export interface Database {
           is_pinned?: boolean;
           owner_id: string;
           folder_id?: string | null;
+          deleted_at?: string | null;
+          archived_at?: string | null;
           pinned_at?: string | null;
           thumbnail_path?: string | null;
           title?: string;
@@ -44,6 +48,8 @@ export interface Database {
           is_pinned?: boolean;
           owner_id?: string;
           folder_id?: string | null;
+          deleted_at?: string | null;
+          archived_at?: string | null;
           pinned_at?: string | null;
           thumbnail_path?: string | null;
           title?: string;

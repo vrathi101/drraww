@@ -28,7 +28,7 @@ export async function listNotes(folderId?: string): Promise<Note[]> {
     .eq("is_deleted", false)
     .match(folderId ? { folder_id: folderId } : {})
     .order("is_pinned", { ascending: false })
-    .order("pinned_at", { ascending: false, nullsLast: true })
+    .order("pinned_at", { ascending: false })
     .order("updated_at", { ascending: false });
 
   if (error) {
@@ -78,7 +78,7 @@ export async function deleteNote(noteId: string) {
 
   const { error } = await supabase
     .from("notes")
-    .update({ is_deleted: true })
+    .update({ is_deleted: true, deleted_at: new Date().toISOString() })
     .eq("id", noteId)
     .eq("owner_id", user.id);
 
@@ -200,4 +200,30 @@ export async function togglePinNote(noteId: string, pin: boolean) {
     .eq("id", noteId)
     .eq("owner_id", user.id);
   if (error) throw new Error(`Failed to update pin: ${error.message}`);
+}
+
+export async function getDeletedNotes(): Promise<Note[]> {
+  const { supabase, user } = await getUserIdOrRedirect();
+  const { data, error } = await supabase
+    .from("notes")
+    .select("*")
+    .eq("owner_id", user.id)
+    .eq("is_deleted", true)
+    .order("deleted_at", { ascending: false });
+
+  if (error) {
+    throw new Error(`Failed to load deleted notes: ${error.message}`);
+  }
+  return (data as Note[] | null) ?? [];
+}
+
+export async function restoreNote(noteId: string) {
+  const { supabase, user } = await getUserIdOrRedirect();
+
+  const { error } = await supabase
+    .from("notes")
+    .update({ is_deleted: false, deleted_at: null })
+    .eq("id", noteId)
+    .eq("owner_id", user.id);
+  if (error) throw new Error(`Failed to restore note: ${error.message}`);
 }

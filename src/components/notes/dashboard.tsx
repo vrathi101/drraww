@@ -114,7 +114,7 @@ export function NotesDashboard({ notes, folders }: Props) {
 
   const handleDelete = (note: Note) => {
     const confirmDelete = confirm(
-      `Delete "${note.title}"? This will move it out of your list.`,
+      `Delete "${note.title}"? It will move to Trash.`,
     );
     if (!confirmDelete) return;
 
