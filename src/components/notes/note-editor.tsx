@@ -201,6 +201,7 @@ function EditorShell({
   const [shareModal, setShareModal] = useState(false);
   const [shareLinks, setShareLinks] = useState<{ id: string; token: string; allow_edit: boolean; expires_at: string | null }[]>([]);
   const [shareLoading, setShareLoading] = useState(false);
+  const [shareExpiry, setShareExpiry] = useState<"never" | "1d" | "7d">("7d");
   const [saveStatus, setSaveStatus] = useState<SaveState>("saved");
   const [isOnline, setIsOnline] = useState(true);
   const localKey = useMemo(() => `note:${noteId}:snapshot`, [noteId]);
@@ -704,11 +705,23 @@ function EditorShell({
               </button>
             </div>
             <div className="space-y-4">
+              <div className="flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
+                <span className="text-xs font-semibold text-slate-700">Expires</span>
+                <select
+                  value={shareExpiry}
+                  onChange={(e) => setShareExpiry(e.target.value as "never" | "1d" | "7d")}
+                  className="rounded-lg border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-800 shadow-sm"
+                >
+                  <option value="1d">In 24 hours</option>
+                  <option value="7d">In 7 days</option>
+                  <option value="never">Never</option>
+                </select>
+              </div>
               <button
                 type="button"
                 onClick={async () => {
                   try {
-                    const { link } = await createShareAction(noteId, false, null);
+                    const { link } = await createShareAction(noteId, false, resolveExpiry(shareExpiry));
                     setShareLinks((prev) => [link, ...prev]);
                   } catch (err) {
                     console.error(err);
@@ -722,7 +735,7 @@ function EditorShell({
                 type="button"
                 onClick={async () => {
                   try {
-                    const { link } = await createShareAction(noteId, true, null);
+                    const { link } = await createShareAction(noteId, true, resolveExpiry(shareExpiry));
                     setShareLinks((prev) => [link, ...prev]);
                   } catch (err) {
                     console.error(err);
@@ -762,7 +775,12 @@ function EditorShell({
                           className="flex flex-col gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2"
                         >
                           <div className="flex items-center justify-between text-xs text-slate-600">
-                            <span>{link.allow_edit ? "Edit" : "View"} link</span>
+                            <span>
+                              {link.allow_edit ? "Edit" : "View"} link
+                              {link.expires_at
+                                ? ` • expires ${new Date(link.expires_at).toLocaleDateString()}`
+                                : " • no expiry"}
+                            </span>
                             <div className="flex items-center gap-2">
                               <button
                                 type="button"
@@ -824,4 +842,11 @@ function coerceSnapshot(
   if ("document" in (value as Record<string, unknown>)) return value as TLEditorSnapshot;
   if ("store" in (value as Record<string, unknown>)) return value as TLStoreSnapshot;
   return undefined;
+}
+
+function resolveExpiry(value: "never" | "1d" | "7d") {
+  if (value === "never") return null;
+  const now = Date.now();
+  const ms = value === "1d" ? 24 * 60 * 60 * 1000 : 7 * 24 * 60 * 60 * 1000;
+  return new Date(now + ms).toISOString();
 }
