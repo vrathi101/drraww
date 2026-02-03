@@ -1,6 +1,11 @@
 "use client";
 
-import { renameNoteAction } from "@/app/app/actions";
+import {
+  renameNoteAction,
+  listSharesAction,
+  createShareAction,
+  revokeShareAction,
+} from "@/app/app/actions";
 import { useSupabase } from "@/components/supabase-provider";
 import {
   type Editor,
@@ -193,6 +198,9 @@ function EditorShell({
   const baseUpdatedAtRef = useRef<string | null>(initialUpdatedAt);
   const lastThumbnailMsRef = useRef(0);
   const lastRevisionMsRef = useRef(0);
+  const [shareModal, setShareModal] = useState(false);
+  const [shareLinks, setShareLinks] = useState<{ id: string; token: string; allow_edit: boolean; expires_at: string | null }[]>([]);
+  const [shareLoading, setShareLoading] = useState(false);
   const [saveStatus, setSaveStatus] = useState<SaveState>("saved");
   const [isOnline, setIsOnline] = useState(true);
   const localKey = useMemo(() => `note:${noteId}:snapshot`, [noteId]);
@@ -549,6 +557,18 @@ function EditorShell({
     }
   }, [fetchRevisions, historyOpen, revisions.length]);
 
+  const loadShares = useCallback(async () => {
+    setShareLoading(true);
+    try {
+      const { links } = await listSharesAction(noteId);
+      setShareLinks(links);
+    } catch (err) {
+      console.error("Failed to load shares", err);
+    } finally {
+      setShareLoading(false);
+    }
+  }, [noteId]);
+
   return (
     <>
       <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50 px-4 py-2">
@@ -567,6 +587,18 @@ function EditorShell({
             className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-800 shadow-sm hover:border-slate-300"
           >
             Export PDF
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setShareModal(true);
+              if (shareLinks.length === 0) {
+                loadShares();
+              }
+            }}
+            className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-800 shadow-sm hover:border-slate-300"
+          >
+            Share
           </button>
           <button
             type="button"
@@ -650,6 +682,116 @@ function EditorShell({
               ))}
             </div>
           )}
+        </div>
+      ) : null}
+      {shareModal ? (
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40 px-4">
+          <div className="w-full max-w-xl rounded-2xl bg-white p-5 shadow-2xl">
+            <div className="mb-3 flex items-center justify-between">
+              <div>
+                <h3 className="text-lg font-semibold text-slate-900">Share this note</h3>
+                <p className="text-sm text-slate-600">
+                  Create view-only or edit links. Anyone with the link can access.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShareModal(false)}
+                className="text-slate-500 hover:text-slate-700"
+                aria-label="Close"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="space-y-4">
+              <button
+                type="button"
+                onClick={async () => {
+                  try {
+                    const { link } = await createShareAction(noteId, false, null);
+                    setShareLinks((prev) => [link, ...prev]);
+                  } catch (err) {
+                    console.error(err);
+                  }
+                }}
+                className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-left text-sm font-semibold text-slate-800 shadow-sm hover:border-slate-300"
+              >
+                + New view link
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  try {
+                    const { link } = await createShareAction(noteId, true, null);
+                    setShareLinks((prev) => [link, ...prev]);
+                  } catch (err) {
+                    console.error(err);
+                  }
+                }}
+                className="w-full rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-left text-sm font-semibold text-amber-800 shadow-sm hover:border-amber-300"
+              >
+                + New edit link
+              </button>
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                <div className="mb-2 flex items-center justify-between">
+                  <span className="text-xs font-semibold text-slate-700">Existing links</span>
+                  {shareLoading ? (
+                    <span className="text-xs text-slate-500">Loading...</span>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={loadShares}
+                      className="text-xs text-amber-700 hover:text-amber-800"
+                    >
+                      Refresh
+                    </button>
+                  )}
+                </div>
+                {shareLinks.length === 0 ? (
+                  <p className="text-sm text-slate-500">No links yet.</p>
+                ) : (
+                  <div className="flex flex-col gap-2">
+                    {shareLinks.map((link) => {
+                      const href =
+                        typeof window !== "undefined"
+                          ? `${window.location.origin}/share/${link.token}`
+                          : `/share/${link.token}`;
+                      return (
+                        <div
+                          key={link.id}
+                          className="flex flex-col gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2"
+                        >
+                          <div className="flex items-center justify-between text-xs text-slate-600">
+                            <span>{link.allow_edit ? "Edit" : "View"} link</span>
+                            <div className="flex items-center gap-2">
+                              <button
+                                type="button"
+                                onClick={() => navigator.clipboard.writeText(href)}
+                                className="rounded-full border border-slate-200 px-2 py-1 text-[11px] font-semibold text-slate-700 hover:border-slate-300"
+                              >
+                                Copy
+                              </button>
+                              <button
+                                type="button"
+                                onClick={async () => {
+                                  await revokeShareAction(link.id);
+                                  setShareLinks((prev) => prev.filter((l) => l.id !== link.id));
+                                }}
+                                className="rounded-full border border-rose-200 px-2 py-1 text-[11px] font-semibold text-rose-700 hover:border-rose-300"
+                              >
+                                Revoke
+                              </button>
+                            </div>
+                          </div>
+                          <span className="break-all text-xs text-slate-800">{href}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
         </div>
       ) : null}
       <div className="relative h-[70vh] w-full">

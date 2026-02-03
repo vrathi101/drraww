@@ -213,7 +213,50 @@ export interface Database {
           {
             foreignKeyName: "note_tags_tag_id_fkey";
             columns: ["tag_id"];
-            referencedRelation: "tags";
+          referencedRelation: "tags";
+          referencedColumns: ["id"];
+        },
+        ];
+      };
+      note_shares: {
+        Row: {
+          allow_edit: boolean;
+          created_at: string;
+          expires_at: string | null;
+          id: string;
+          note_id: string;
+          owner_id: string;
+          token: string;
+        };
+        Insert: {
+          allow_edit?: boolean;
+          created_at?: string;
+          expires_at?: string | null;
+          id?: string;
+          note_id: string;
+          owner_id: string;
+          token: string;
+        };
+        Update: {
+          allow_edit?: boolean;
+          created_at?: string;
+          expires_at?: string | null;
+          id?: string;
+          note_id?: string;
+          owner_id?: string;
+          token?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "note_shares_note_id_fkey";
+            columns: ["note_id"];
+            referencedRelation: "notes";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "note_shares_owner_id_fkey";
+            columns: ["owner_id"];
+            referencedRelation: "users";
             referencedColumns: ["id"];
           },
         ];

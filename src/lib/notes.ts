@@ -4,6 +4,7 @@ import { Database } from "./database.types";
 
 export type Note = Database["public"]["Tables"]["notes"]["Row"];
 export type Folder = Database["public"]["Tables"]["folders"]["Row"];
+export type NoteShare = Database["public"]["Tables"]["note_shares"]["Row"];
 
 async function getUserIdOrRedirect() {
   const supabase = createSupabaseServerClient();
@@ -332,6 +333,40 @@ export async function markNoteOpened(noteId: string) {
   if (error) {
     console.warn(`Failed to record last opened: ${error.message}`);
   }
+}
+
+export async function listShares(noteId: string): Promise<NoteShare[]> {
+  const { supabase, user } = await getUserIdOrRedirect();
+  const { data, error } = await supabase
+    .from("note_shares")
+    .select("*")
+    .eq("note_id", noteId)
+    .eq("owner_id", user.id)
+    .order("created_at", { ascending: false });
+  if (error) throw new Error(`Failed to load share links: ${error.message}`);
+  return (data as NoteShare[] | null) ?? [];
+}
+
+export async function createShare(noteId: string, allowEdit: boolean, expiresAt?: string | null) {
+  const { supabase, user } = await getUserIdOrRedirect();
+  const token = crypto.randomUUID();
+  const { error, data } = await supabase
+    .from("note_shares")
+    .insert({ note_id: noteId, owner_id: user.id, token, allow_edit: allowEdit, expires_at: expiresAt ?? null })
+    .select("*")
+    .single();
+  if (error || !data) throw new Error(`Failed to create share link: ${error?.message}`);
+  return data as NoteShare;
+}
+
+export async function revokeShare(id: string) {
+  const { supabase, user } = await getUserIdOrRedirect();
+  const { error } = await supabase
+    .from("note_shares")
+    .delete()
+    .eq("id", id)
+    .eq("owner_id", user.id);
+  if (error) throw new Error(`Failed to revoke share: ${error.message}`);
 }
 
 function isDescendant(

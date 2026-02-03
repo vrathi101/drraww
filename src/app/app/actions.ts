@@ -13,6 +13,9 @@ import {
   togglePinNote,
   archiveNote,
   updateNoteTags,
+  listShares,
+  createShare,
+  revokeShare,
 } from "@/lib/notes";
 
 export async function createNoteAction() {
@@ -74,4 +77,18 @@ export async function archiveNoteAction(noteId: string) {
 export async function updateNoteTagsAction(noteId: string, tagIds: string[]) {
   await updateNoteTags(noteId, tagIds);
   revalidatePath("/app");
+}
+
+export async function listSharesAction(noteId: string) {
+  const links = await listShares(noteId);
+  return { links };
+}
+
+export async function createShareAction(noteId: string, allowEdit: boolean, expiresAt?: string | null) {
+  const link = await createShare(noteId, allowEdit, expiresAt);
+  return { link };
+}
+
+export async function revokeShareAction(shareId: string) {
+  await revokeShare(shareId);
 }
