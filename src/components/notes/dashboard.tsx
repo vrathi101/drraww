@@ -20,6 +20,11 @@ type Props = {
   folders: Folder[];
 };
 
+type DialogState =
+  | { type: "folder"; mode: "create" | "rename"; folder?: Folder }
+  | { type: "delete-folder"; folder: Folder }
+  | null;
+
 export function NotesDashboard({ notes, folders }: Props) {
   const router = useRouter();
   const { supabase } = useSupabase();
@@ -27,6 +32,8 @@ export function NotesDashboard({ notes, folders }: Props) {
   const [isPending, startTransition] = useTransition();
   const [thumbnails, setThumbnails] = useState<Record<string, string>>({});
   const [selectedFolder, setSelectedFolder] = useState<string | null>(null);
+  const [dialog, setDialog] = useState<DialogState>(null);
+  const [folderNameInput, setFolderNameInput] = useState("");
 
   const filtered = useMemo(() => {
     const term = search.trim().toLowerCase();
@@ -75,6 +82,14 @@ export function NotesDashboard({ notes, folders }: Props) {
     };
   }, [notes, supabase.storage]);
 
+  useEffect(() => {
+    if (dialog?.type === "folder") {
+      setFolderNameInput(dialog.folder?.name ?? "");
+    } else {
+      setFolderNameInput("");
+    }
+  }, [dialog]);
+
   const handleCreate = () => {
     startTransition(async () => {
       const { noteId } = await createNoteAction();
@@ -105,35 +120,15 @@ export function NotesDashboard({ notes, folders }: Props) {
   };
 
   const handleCreateFolder = () => {
-    const name = prompt("Folder name", "New folder");
-    if (!name || !name.trim()) return;
-    startTransition(async () => {
-      await createFolderAction(name.trim());
-      router.refresh();
-    });
+    setDialog({ type: "folder", mode: "create" });
   };
 
   const handleRenameFolder = (folder: Folder) => {
-    const next = prompt("Rename folder", folder.name);
-    if (!next || !next.trim() || next.trim() === folder.name) return;
-    startTransition(async () => {
-      await renameFolderAction(folder.id, next.trim());
-      router.refresh();
-    });
+    setDialog({ type: "folder", mode: "rename", folder });
   };
 
   const handleDeleteFolder = (folder: Folder) => {
-    const ok = confirm(
-      `Delete folder "${folder.name}"? Notes inside will be moved to Unfiled.`,
-    );
-    if (!ok) return;
-    startTransition(async () => {
-      await deleteFolderAction(folder.id);
-      if (selectedFolder === folder.id) {
-        setSelectedFolder(null);
-      }
-      router.refresh();
-    });
+    setDialog({ type: "delete-folder", folder });
   };
 
   const handleMoveNote = (noteId: string, folderId: string | null) => {
@@ -332,11 +327,11 @@ export function NotesDashboard({ notes, folders }: Props) {
                     <Link
                       href={`/app/note/${note.id}`}
                       className="inline-flex items-center gap-2 text-sm font-semibold text-amber-700 hover:text-amber-800"
-                    >
-                      Open note →
-                    </Link>
-                    {isPending ? (
-                      <span className="text-xs text-slate-500">Working...</span>
+                  >
+                    Open note →
+                  </Link>
+                  {isPending ? (
+                    <span className="text-xs text-slate-500">Working...</span>
                     ) : null}
                   </div>
                 </div>
@@ -345,6 +340,103 @@ export function NotesDashboard({ notes, folders }: Props) {
           </div>
         )}
       </div>
+      {dialog ? (
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40 px-4">
+          <div className="w-full max-w-md rounded-2xl bg-white p-5 shadow-2xl">
+            {dialog.type === "folder" ? (
+              <>
+                <h3 className="text-lg font-semibold text-slate-900">
+                  {dialog.mode === "create" ? "New folder" : "Rename folder"}
+                </h3>
+                <p className="mt-1 text-sm text-slate-600">
+                  {dialog.mode === "create"
+                    ? "Create a folder to group notes."
+                    : "Update the folder name."}
+                </p>
+                <form
+                  className="mt-4 flex flex-col gap-3"
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    const name = folderNameInput.trim();
+                    if (!name) return;
+                    startTransition(async () => {
+                      if (dialog.mode === "create") {
+                        await createFolderAction(name);
+                      } else if (dialog.folder) {
+                        await renameFolderAction(dialog.folder.id, name);
+                      }
+                      setDialog(null);
+                      router.refresh();
+                    });
+                  }}
+                >
+                  <input
+                    autoFocus
+                    value={folderNameInput}
+                    onChange={(e) => setFolderNameInput(e.target.value)}
+                    className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm shadow-sm outline-none ring-2 ring-transparent transition focus:border-amber-300 focus:ring-amber-100"
+                    placeholder="Folder name"
+                  />
+                  <div className="flex items-center justify-end gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setDialog(null)}
+                      className="rounded-full border border-slate-200 px-3 py-1.5 text-sm font-medium text-slate-700 hover:border-slate-300"
+                      disabled={isPending}
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      className="rounded-full bg-amber-600 px-4 py-1.5 text-sm font-semibold text-white shadow-sm transition hover:bg-amber-700 disabled:opacity-60"
+                      disabled={isPending}
+                    >
+                      {dialog.mode === "create" ? "Create" : "Save"}
+                    </button>
+                  </div>
+                </form>
+              </>
+            ) : dialog.type === "delete-folder" ? (
+              <>
+                <h3 className="text-lg font-semibold text-slate-900">
+                  Delete folder
+                </h3>
+                <p className="mt-2 text-sm text-slate-700">
+                  Notes inside will move to Unfiled. Continue?
+                </p>
+                <div className="mt-4 flex items-center justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setDialog(null)}
+                    className="rounded-full border border-slate-200 px-3 py-1.5 text-sm font-medium text-slate-700 hover:border-slate-300"
+                    disabled={isPending}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!dialog.folder) return;
+                      startTransition(async () => {
+                        await deleteFolderAction(dialog.folder.id);
+                        if (selectedFolder === dialog.folder?.id) {
+                          setSelectedFolder(null);
+                        }
+                        setDialog(null);
+                        router.refresh();
+                      });
+                    }}
+                    className="rounded-full bg-rose-600 px-4 py-1.5 text-sm font-semibold text-white shadow-sm transition hover:bg-rose-700 disabled:opacity-60"
+                    disabled={isPending}
+                  >
+                    Delete
+                  </button>
+                </div>
+              </>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
