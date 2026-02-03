@@ -56,12 +56,23 @@ export async function PUT(
   const supabase = createSupabaseServiceClient();
   const { data: share, error: shareError } = await supabase
     .from("note_shares")
-    .select("allow_edit, note_id, owner_id")
+    .select("allow_edit, note_id, owner_id, password_hash, expires_at")
     .eq("token", params.token)
     .maybeSingle();
 
   if (shareError || !share) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
+  }
+
+  if (share.expires_at && new Date(share.expires_at).getTime() < Date.now()) {
+    return NextResponse.json({ error: "Link expired" }, { status: 410 });
+  }
+
+  if (share.password_hash) {
+    const supplied = request.headers.get("x-share-password") || "";
+    if (!supplied || hashPassword(supplied) !== share.password_hash) {
+      return NextResponse.json({ error: "Password required" }, { status: 401 });
+    }
   }
 
   if (!share.allow_edit) {

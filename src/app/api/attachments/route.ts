@@ -19,6 +19,17 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Missing file or noteId" }, { status: 400 });
   }
 
+  const { data: noteRow, error: noteError } = await supabase
+    .from("notes")
+    .select("id")
+    .eq("id", noteId)
+    .eq("owner_id", user.id)
+    .eq("is_deleted", false)
+    .maybeSingle();
+  if (noteError || !noteRow) {
+    return NextResponse.json({ error: "Note not found" }, { status: 404 });
+  }
+
   const bucket = process.env.NEXT_PUBLIC_SUPABASE_ASSETS_BUCKET || "note-assets";
   const extension = file.name.split(".").pop() || "bin";
   const path = `attachments/${user.id}/${noteId}/${randomUUID()}.${extension}`;
