@@ -22,6 +22,17 @@ import Link from "next/link";
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 
+const TAG_COLORS = [
+  "#f97316",
+  "#f59e0b",
+  "#10b981",
+  "#14b8a6",
+  "#0ea5e9",
+  "#3b82f6",
+  "#a855f7",
+  "#ef4444",
+];
+
 type Props = {
   notes: Note[];
   folders: Folder[];
@@ -56,6 +67,7 @@ export function NotesDashboard({ notes, folders, tags }: Props) {
     selected: string[];
   } | null>(null);
   const [newTagName, setNewTagName] = useState("");
+  const [newTagColor, setNewTagColor] = useState<string | null>(null);
   const breadcrumb = useMemo(() => buildBreadcrumb(selectedFolder, folders), [selectedFolder, folders]);
 
   const filtered = useMemo(() => {
@@ -147,6 +159,25 @@ export function NotesDashboard({ notes, folders, tags }: Props) {
     }
   }, [dialog, selectedFolder]);
 
+  // Persist tag filters between sessions
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const stored = window.localStorage.getItem("drraww:selectedTags");
+    if (!stored) return;
+    try {
+      const parsed: string[] = JSON.parse(stored);
+      const valid = parsed.filter((id) => tagList.some((t) => t.id === id));
+      if (valid.length > 0) setSelectedTags(valid);
+    } catch {
+      // ignore parse errors
+    }
+  }, [tagList]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    window.localStorage.setItem("drraww:selectedTags", JSON.stringify(selectedTags));
+  }, [selectedTags]);
+
   const handleCreate = () => {
     startTransition(async () => {
       const { noteId } = await createNoteAction();
@@ -231,9 +262,10 @@ export function NotesDashboard({ notes, folders, tags }: Props) {
     }
     startTransition(async () => {
       try {
-        const { id } = await createTagAction(name);
-        setTagList((prev) => [...prev, { id, name, color: null }]);
+        const { id } = await createTagAction(name, newTagColor);
+        setTagList((prev) => [...prev, { id, name, color: newTagColor }]);
         setNewTagName("");
+        setNewTagColor(null);
       } catch (err) {
         setToast({
           type: "error",
@@ -375,7 +407,7 @@ export function NotesDashboard({ notes, folders, tags }: Props) {
               <option value="title">Title A-Z</option>
             </select>
             <div className="flex flex-wrap items-center gap-2">
-              {tags.map((tag) => {
+              {tagList.map((tag) => {
                 const active = selectedTags.includes(tag.id);
                 return (
                   <button
@@ -397,6 +429,37 @@ export function NotesDashboard({ notes, folders, tags }: Props) {
                   </button>
                 );
               })}
+              <div className="flex items-center gap-2 rounded-full border border-dashed border-slate-300 px-3 py-1">
+                <input
+                  type="text"
+                  value={newTagName}
+                  onChange={(e) => setNewTagName(e.target.value)}
+                  placeholder="New tag"
+                  className="w-24 bg-transparent text-xs outline-none placeholder:text-slate-400"
+                />
+                <div className="flex items-center gap-1">
+                  {TAG_COLORS.map((color) => (
+                    <button
+                      key={color}
+                      type="button"
+                      onClick={() => setNewTagColor(color)}
+                      className={`h-4 w-4 rounded-full border ${
+                        newTagColor === color ? "border-slate-800 ring-2 ring-slate-300" : "border-slate-200"
+                      }`}
+                      style={{ backgroundColor: color }}
+                      aria-label={`Pick ${color}`}
+                    />
+                  ))}
+                </div>
+                <button
+                  type="button"
+                  onClick={handleCreateTag}
+                  className="text-xs font-semibold text-amber-700 hover:text-amber-800"
+                  disabled={isPending}
+                >
+                  Add
+                </button>
+              </div>
               {selectedTags.length > 0 ? (
                 <button
                   type="button"
@@ -818,6 +881,20 @@ export function NotesDashboard({ notes, folders, tags }: Props) {
                 className="flex-1 rounded-xl border border-slate-200 px-3 py-2 text-sm shadow-sm outline-none ring-2 ring-transparent transition focus:border-amber-300 focus:ring-amber-100"
                 placeholder="New tag name"
               />
+              <div className="flex items-center gap-1">
+                {TAG_COLORS.map((color) => (
+                  <button
+                    key={color}
+                    type="button"
+                    onClick={() => setNewTagColor(color)}
+                    className={`h-6 w-6 rounded-full border ${
+                      newTagColor === color ? "border-slate-800 ring-2 ring-slate-300" : "border-slate-200"
+                    }`}
+                    style={{ backgroundColor: color }}
+                    aria-label={`Pick ${color}`}
+                  />
+                ))}
+              </div>
               <button
                 type="button"
                 onClick={handleCreateTag}
