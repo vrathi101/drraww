@@ -3,7 +3,7 @@ begin;
 create table if not exists public.note_shares (
   id uuid primary key default gen_random_uuid(),
   note_id uuid not null references public.notes(id) on delete cascade,
-  owner_id uuid not null references public.users(id) on delete cascade,
+  owner_id uuid not null references auth.users(id) on delete cascade,
   token text not null unique,
   allow_edit boolean not null default false,
   created_at timestamptz not null default now(),
