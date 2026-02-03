@@ -69,6 +69,14 @@ export function NotesDashboard({ notes, folders, tags }: Props) {
   const [newTagName, setNewTagName] = useState("");
   const [newTagColor, setNewTagColor] = useState<string | null>(null);
   const breadcrumb = useMemo(() => buildBreadcrumb(selectedFolder, folders), [selectedFolder, folders]);
+  const recents = useMemo(() => {
+    const list = [...notes].sort((a, b) => {
+      const aOpen = a.last_opened_at ? new Date(a.last_opened_at).getTime() : 0;
+      const bOpen = b.last_opened_at ? new Date(b.last_opened_at).getTime() : 0;
+      return bOpen - aOpen;
+    });
+    return list.slice(0, 5);
+  }, [notes]);
 
   const filtered = useMemo(() => {
     const term = search.trim().toLowerCase();
@@ -109,6 +117,8 @@ export function NotesDashboard({ notes, folders, tags }: Props) {
 
     return next;
   }, [notes, search, selectedFolder, selectedTags, sort]);
+  const pinnedNotes = useMemo(() => filtered.filter((n) => n.is_pinned), [filtered]);
+  const unpinnedNotes = useMemo(() => filtered.filter((n) => !n.is_pinned), [filtered]);
 
   useEffect(() => {
     const bucket =
@@ -275,6 +285,134 @@ export function NotesDashboard({ notes, folders, tags }: Props) {
       }
     });
   };
+
+  const renderNoteCard = (note: Note) => (
+    <article
+      key={note.id}
+      className="group flex h-full flex-col justify-between overflow-hidden rounded-2xl border border-slate-200 bg-white/90 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
+    >
+      <Link href={`/app/note/${note.id}`} className="block">
+        <div className="relative aspect-[4/3] w-full overflow-hidden bg-slate-100">
+          {thumbnails[note.thumbnail_path ?? ""] ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={thumbnails[note.thumbnail_path ?? ""]}
+              alt={`${note.title} thumbnail`}
+              className="h-full w-full object-cover transition duration-200 group-hover:scale-[1.01]"
+              loading="lazy"
+            />
+          ) : (
+            <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-amber-50 via-white to-sky-50 text-sm font-medium text-slate-500">
+              No preview yet
+            </div>
+          )}
+        </div>
+      </Link>
+      <div className="flex flex-1 flex-col gap-3 px-4 py-3">
+        <div className="flex items-start justify-between gap-3">
+          <div className="space-y-1">
+            <h2 className="line-clamp-1 text-lg font-semibold text-slate-900">
+              {note.title || "Untitled"}
+            </h2>
+            <p className="text-xs text-slate-500">
+              Updated {formatUpdatedAt(note.updated_at)}
+            </p>
+            <div className="text-xs text-slate-600">
+              Folder:{" "}
+              <select
+                className="rounded border border-slate-200 bg-white px-2 py-1 text-xs"
+                value={note.folder_id ?? ""}
+                onChange={(e) =>
+                  handleMoveNote(note.id, e.target.value === "" ? null : e.target.value)
+                }
+                disabled={isPending}
+              >
+                <option value="">Unfiled</option>
+                {folders.map((f) => (
+                  <option key={f.id} value={f.id}>
+                    {f.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="text-xs font-semibold text-amber-700">
+              {note.is_pinned ? "Pinned" : ""}
+            </div>
+          </div>
+          <div className="flex items-center gap-2 opacity-0 transition group-hover:opacity-100">
+            <button
+              type="button"
+              onClick={() => handleRename(note)}
+              className="rounded-full border border-slate-200 px-3 py-1 text-xs font-medium text-slate-700 hover:border-slate-400"
+              disabled={isPending}
+            >
+              Rename
+            </button>
+            <button
+              type="button"
+              onClick={() => handleDelete(note)}
+              className="rounded-full border border-rose-200 px-3 py-1 text-xs font-semibold text-rose-700 hover:border-rose-400"
+              disabled={isPending}
+            >
+              Delete
+            </button>
+            <button
+              type="button"
+              onClick={() => handleArchive(note)}
+              className="rounded-full border border-slate-200 px-3 py-1 text-xs font-medium text-slate-700 hover:border-slate-400"
+              disabled={isPending}
+            >
+              Archive
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                const selected =
+                  (note as Note & { note_tags?: { tag_id: string }[] }).note_tags?.map(
+                    (t) => t.tag_id,
+                  ) ?? [];
+                setTagDialog({
+                  noteId: note.id,
+                  title: note.title || "Untitled",
+                  selected,
+                });
+              }}
+              className="rounded-full border border-slate-200 px-3 py-1 text-xs font-medium text-slate-700 hover:border-slate-400"
+              disabled={isPending}
+            >
+              Tags
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                startTransition(async () => {
+                  await togglePinNoteAction(note.id, !note.is_pinned);
+                  setToast({
+                    type: "success",
+                    message: note.is_pinned ? "Unpinned" : "Pinned",
+                  });
+                  router.refresh();
+                });
+              }}
+              className="rounded-full border border-amber-200 px-3 py-1 text-xs font-semibold text-amber-700 hover:border-amber-400"
+              disabled={isPending}
+            >
+              {note.is_pinned ? "Unpin" : "Pin"}
+            </button>
+          </div>
+        </div>
+        <div className="mt-auto flex items-center justify-between gap-3">
+          <Link
+            href={`/app/note/${note.id}`}
+            className="inline-flex items-center gap-2 text-sm font-semibold text-amber-700 hover:text-amber-800"
+          >
+            Open note →
+          </Link>
+          {isPending ? <span className="text-xs text-slate-500">Working...</span> : null}
+        </div>
+      </div>
+    </article>
+  );
 
   return (
     <div className="flex flex-col gap-6 lg:flex-row">
@@ -481,6 +619,33 @@ export function NotesDashboard({ notes, folders, tags }: Props) {
           </div>
         </div>
 
+        {recents.length > 0 ? (
+          <div className="mt-4 rounded-2xl border border-slate-200 bg-white/90 p-4 shadow-sm">
+            <div className="mb-3 flex items-center justify-between">
+              <div className="text-sm font-semibold text-slate-800">Recents</div>
+              <span className="text-xs text-slate-500">Last opened</span>
+            </div>
+            <div className="flex gap-3 overflow-x-auto pb-2">
+              {recents.map((note) => (
+                <Link
+                  key={note.id}
+                  href={`/app/note/${note.id}`}
+                  className="min-w-[180px] rounded-2xl border border-slate-200 bg-white px-3 py-3 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
+                >
+                  <div className="text-sm font-semibold text-slate-900 line-clamp-1">
+                    {note.title || "Untitled"}
+                  </div>
+                  <div className="text-xs text-slate-500">
+                    {note.last_opened_at
+                      ? `Opened ${formatUpdatedAt(note.last_opened_at)}`
+                      : `Edited ${formatUpdatedAt(note.updated_at)}`}
+                  </div>
+                </Link>
+              ))}
+            </div>
+          </div>
+        ) : null}
+
         {filtered.length === 0 ? (
           <div className="mt-4 rounded-2xl border border-dashed border-slate-300 bg-white/90 p-10 text-slate-600 shadow-sm">
             No notes yet. Click{" "}
@@ -495,141 +660,33 @@ export function NotesDashboard({ notes, folders, tags }: Props) {
             to start drawing.
           </div>
         ) : (
-          <div className="mt-4 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-            {filtered.map((note) => (
-              <article
-                key={note.id}
-                className="group flex h-full flex-col justify-between overflow-hidden rounded-2xl border border-slate-200 bg-white/90 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
-              >
-                <Link href={`/app/note/${note.id}`} className="block">
-                  <div className="relative aspect-[4/3] w-full overflow-hidden bg-slate-100">
-                    {thumbnails[note.thumbnail_path ?? ""] ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
-                        src={thumbnails[note.thumbnail_path ?? ""]}
-                        alt={`${note.title} thumbnail`}
-                        className="h-full w-full object-cover transition duration-200 group-hover:scale-[1.01]"
-                        loading="lazy"
-                      />
-                    ) : (
-                      <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-amber-50 via-white to-sky-50 text-sm font-medium text-slate-500">
-                        No preview yet
-                      </div>
-                    )}
-                  </div>
-                </Link>
-                <div className="flex flex-1 flex-col gap-3 px-4 py-3">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="space-y-1">
-                    <h2 className="line-clamp-1 text-lg font-semibold text-slate-900">
-                      {note.title || "Untitled"}
-                    </h2>
-                    <p className="text-xs text-slate-500">
-                      Updated {formatUpdatedAt(note.updated_at)}
-                    </p>
-                    <div className="text-xs text-slate-600">
-                      Folder:{" "}
-                      <select
-                        className="rounded border border-slate-200 bg-white px-2 py-1 text-xs"
-                        value={note.folder_id ?? ""}
-                        onChange={(e) =>
-                          handleMoveNote(
-                            note.id,
-                            e.target.value === "" ? null : e.target.value,
-                          )
-                        }
-                        disabled={isPending}
-                      >
-                        <option value="">Unfiled</option>
-                        {folders.map((f) => (
-                          <option key={f.id} value={f.id}>
-                            {f.name}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    <div className="text-xs text-amber-700 font-semibold">
-                    {note.is_pinned ? "Pinned" : ""}
-                  </div>
+          <div className="mt-4 space-y-6">
+            {pinnedNotes.length > 0 ? (
+              <section className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-sm font-semibold text-slate-800">Pinned</h3>
+                  <span className="text-xs text-slate-500">{pinnedNotes.length}</span>
                 </div>
-                    <div className="flex items-center gap-2 opacity-0 transition group-hover:opacity-100">
-                      <button
-                        type="button"
-                        onClick={() => handleRename(note)}
-                        className="rounded-full border border-slate-200 px-3 py-1 text-xs font-medium text-slate-700 hover:border-slate-400"
-                        disabled={isPending}
-                      >
-                        Rename
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleDelete(note)}
-                        className="rounded-full border border-rose-200 px-3 py-1 text-xs font-semibold text-rose-700 hover:border-rose-400"
-                        disabled={isPending}
-                    >
-                      Delete
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleArchive(note)}
-                      className="rounded-full border border-slate-200 px-3 py-1 text-xs font-medium text-slate-700 hover:border-slate-400"
-                      disabled={isPending}
-                    >
-                      Archive
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const selected =
-                          (note as Note & { note_tags?: { tag_id: string }[] }).note_tags?.map(
-                            (t) => t.tag_id,
-                          ) ?? [];
-                        setTagDialog({
-                          noteId: note.id,
-                          title: note.title || "Untitled",
-                          selected,
-                        });
-                      }}
-                      className="rounded-full border border-slate-200 px-3 py-1 text-xs font-medium text-slate-700 hover:border-slate-400"
-                      disabled={isPending}
-                    >
-                      Tags
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        startTransition(async () => {
-                          await togglePinNoteAction(note.id, !note.is_pinned);
-                          setToast({
-                            type: "success",
-                            message: note.is_pinned ? "Unpinned" : "Pinned",
-                          });
-                          router.refresh();
-                        });
-                      }}
-                      className="rounded-full border border-amber-200 px-3 py-1 text-xs font-semibold text-amber-700 hover:border-amber-400"
-                      disabled={isPending}
-                    >
-                      {note.is_pinned ? "Unpin" : "Pin"}
-                    </button>
-                  </div>
+                <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                  {pinnedNotes.map((note) => renderNoteCard(note))}
                 </div>
-                <div className="mt-auto flex items-center justify-between gap-3">
-                  <Link
-                    href={`/app/note/${note.id}`}
-                    className="inline-flex items-center gap-2 text-sm font-semibold text-amber-700 hover:text-amber-800"
-                  >
-                    Open note →
-                  </Link>
-                  {isPending ? (
-                    <span className="text-xs text-slate-500">Working...</span>
-                  ) : null}
+              </section>
+            ) : null}
+            {unpinnedNotes.length > 0 ? (
+              <section className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-sm font-semibold text-slate-800">
+                    {pinnedNotes.length > 0 ? "Other notes" : "All notes"}
+                  </h3>
+                  <span className="text-xs text-slate-500">{unpinnedNotes.length}</span>
                 </div>
-              </div>
-            </article>
-          ))}
-        </div>
-      )}
+                <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                  {unpinnedNotes.map((note) => renderNoteCard(note))}
+                </div>
+              </section>
+            ) : null}
+          </div>
+        )}
       </div>
       {dialog ? (
         <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40 px-4">
