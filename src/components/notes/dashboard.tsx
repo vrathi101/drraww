@@ -34,6 +34,9 @@ export function NotesDashboard({ notes, folders }: Props) {
   const [selectedFolder, setSelectedFolder] = useState<string | null>(null);
   const [dialog, setDialog] = useState<DialogState>(null);
   const [folderNameInput, setFolderNameInput] = useState("");
+  const [toast, setToast] = useState<{ type: "error" | "success"; message: string } | null>(
+    null,
+  );
 
   const filtered = useMemo(() => {
     const term = search.trim().toLowerCase();
@@ -103,6 +106,7 @@ export function NotesDashboard({ notes, folders }: Props) {
 
     startTransition(async () => {
       await renameNoteAction(note.id, next.trim());
+      setToast({ type: "success", message: "Note renamed" });
       router.refresh();
     });
   };
@@ -128,12 +132,13 @@ export function NotesDashboard({ notes, folders }: Props) {
   };
 
   const handleDeleteFolder = (folder: Folder) => {
-    setDialog({ type: "delete-folder", folder });
+      setDialog({ type: "delete-folder", folder });
   };
 
   const handleMoveNote = (noteId: string, folderId: string | null) => {
     startTransition(async () => {
       await moveNoteToFolderAction(noteId, folderId);
+      setToast({ type: "success", message: "Note moved" });
       router.refresh();
     });
   };
@@ -358,15 +363,30 @@ export function NotesDashboard({ notes, folders }: Props) {
                   onSubmit={(e) => {
                     e.preventDefault();
                     const name = folderNameInput.trim();
-                    if (!name) return;
+                    if (!name) {
+                      setToast({ type: "error", message: "Folder name cannot be empty" });
+                      return;
+                    }
                     startTransition(async () => {
-                      if (dialog.mode === "create") {
-                        await createFolderAction(name);
-                      } else if (dialog.folder) {
-                        await renameFolderAction(dialog.folder.id, name);
+                      try {
+                        if (dialog.mode === "create") {
+                          await createFolderAction(name);
+                          setToast({ type: "success", message: "Folder created" });
+                        } else if (dialog.folder) {
+                          await renameFolderAction(dialog.folder.id, name);
+                          setToast({ type: "success", message: "Folder renamed" });
+                        }
+                        setDialog(null);
+                        router.refresh();
+                      } catch (err) {
+                        setToast({
+                          type: "error",
+                          message:
+                            err instanceof Error
+                              ? err.message
+                              : "Unable to save folder. It may already exist.",
+                        });
                       }
-                      setDialog(null);
-                      router.refresh();
                     });
                   }}
                 >
@@ -415,25 +435,45 @@ export function NotesDashboard({ notes, folders }: Props) {
                   </button>
                   <button
                     type="button"
-                    onClick={() => {
-                      if (!dialog.folder) return;
-                      startTransition(async () => {
-                        await deleteFolderAction(dialog.folder.id);
-                        if (selectedFolder === dialog.folder?.id) {
-                          setSelectedFolder(null);
-                        }
-                        setDialog(null);
-                        router.refresh();
-                      });
-                    }}
-                    className="rounded-full bg-rose-600 px-4 py-1.5 text-sm font-semibold text-white shadow-sm transition hover:bg-rose-700 disabled:opacity-60"
-                    disabled={isPending}
-                  >
+                      onClick={() => {
+                        if (!dialog.folder) return;
+                        startTransition(async () => {
+                          await deleteFolderAction(dialog.folder.id);
+                          if (selectedFolder === dialog.folder?.id) {
+                            setSelectedFolder(null);
+                          }
+                          setDialog(null);
+                          setToast({ type: "success", message: "Folder deleted" });
+                          router.refresh();
+                        });
+                      }}
+                      className="rounded-full bg-rose-600 px-4 py-1.5 text-sm font-semibold text-white shadow-sm transition hover:bg-rose-700 disabled:opacity-60"
+                      disabled={isPending}
+                    >
                     Delete
                   </button>
                 </div>
               </>
             ) : null}
+          </div>
+        </div>
+      ) : null}
+      {toast ? (
+        <div className="fixed bottom-4 right-4 z-40 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm shadow-xl">
+          <div className="flex items-center gap-2">
+            <span
+              className={`h-2 w-2 rounded-full ${
+                toast.type === "success" ? "bg-emerald-500" : "bg-rose-500"
+              }`}
+            />
+            <span className="text-slate-800">{toast.message}</span>
+            <button
+              type="button"
+              className="text-xs text-slate-500 hover:text-slate-700"
+              onClick={() => setToast(null)}
+            >
+              ✕
+            </button>
           </div>
         </div>
       ) : null}
