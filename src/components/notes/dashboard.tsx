@@ -600,13 +600,13 @@ export function NotesDashboard({ notes, folders, tags }: Props) {
 
   return (
     <div className="flex flex-col gap-6 lg:flex-row">
-      <aside className="w-full rounded-2xl border border-slate-200 bg-white/90 p-4 shadow-sm lg:w-64">
-        <div className="mb-3 flex items-center justify-between">
+      <aside className="w-full rounded-3xl border border-slate-200 bg-white/80 p-5 shadow-sm backdrop-blur lg:w-72">
+        <div className="mb-4 flex items-center justify-between">
           <div className="text-sm font-semibold text-slate-800">Folders</div>
           <button
             type="button"
             onClick={handleCreateFolder}
-            className="text-xs font-semibold text-amber-700 hover:text-amber-800"
+            className="rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-800 transition hover:bg-amber-200"
             disabled={isPending}
           >
             + New
@@ -614,11 +614,11 @@ export function NotesDashboard({ notes, folders, tags }: Props) {
         </div>
         <div className="flex flex-col gap-2">
           <div
-            className={`flex items-center justify-between rounded-xl px-3 py-2 text-sm font-semibold transition ${
+            className={`flex items-center justify-between rounded-2xl px-3 py-2 text-sm font-semibold transition ${
               selectedFolder === null
-                ? "bg-amber-100 text-amber-800"
+                ? "bg-amber-100 text-amber-800 shadow-sm"
                 : "text-slate-700 hover:bg-slate-100"
-            } ${dragOverFolder === "root" ? "border border-amber-300 bg-amber-50" : ""}`}
+            } ${dragOverFolder === "root" ? "border border-amber-300 bg-amber-50" : "border border-transparent"}`}
             onDragOver={(e) => e.preventDefault()}
             onDrop={(e) => handleDropOnFolder(null, e)}
             onDragEnter={(e) => {
@@ -693,7 +693,29 @@ export function NotesDashboard({ notes, folders, tags }: Props) {
               <option value="created">Created (newest)</option>
               <option value="title">Title A-Z</option>
             </select>
+        </div>
+
+        <div className="mt-2 grid gap-3 rounded-3xl border border-slate-200 bg-white/90 p-4 shadow-sm lg:grid-cols-[1fr_auto_auto] lg:items-center">
           <div className="flex flex-wrap items-center gap-2">
+            <input
+              type="search"
+              placeholder="Search titles"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              ref={searchRef}
+              className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm shadow-sm outline-none ring-2 ring-transparent transition focus:border-slate-300 focus:ring-amber-200 sm:w-72"
+            />
+            <select
+              value={sort}
+              onChange={(e) => setSort(e.target.value as "updated" | "created" | "title" | "last_opened")}
+              className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm shadow-sm outline-none transition focus:border-amber-300"
+            >
+              <option value="updated">Last edited</option>
+              <option value="last_opened">Last opened</option>
+              <option value="created">Created (newest)</option>
+              <option value="title">Title A-Z</option>
+            </select>
+            <div className="flex flex-wrap items-center gap-2">
               {tagList.map((tag) => {
                 const active = selectedTags.includes(tag.id);
                 return (
@@ -771,19 +793,20 @@ export function NotesDashboard({ notes, folders, tags }: Props) {
                 </button>
               ) : null}
             </div>
-            <button
-              type="button"
-              onClick={handleCreate}
-              disabled={isPending}
-              className="inline-flex items-center justify-center rounded-full bg-black px-5 py-3 text-sm font-medium text-white shadow-lg shadow-black/10 transition hover:bg-black/90 disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              New note
-            </button>
           </div>
+          <button
+            type="button"
+            onClick={handleCreate}
+            disabled={isPending}
+            className="inline-flex items-center justify-center rounded-full bg-black px-6 py-3 text-sm font-semibold text-white shadow-lg shadow-black/10 transition hover:bg-black/90 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            New note
+          </button>
+        </div>
         </div>
 
         {recents.length > 0 ? (
-          <div className="mt-4 rounded-2xl border border-slate-200 bg-white/90 p-4 shadow-sm">
+          <div className="mt-6 rounded-3xl border border-slate-200 bg-white/90 p-4 shadow-sm">
             <div className="mb-3 flex items-center justify-between">
               <div className="text-sm font-semibold text-slate-800">Recents</div>
               <span className="text-xs text-slate-500">Last opened</span>
@@ -823,7 +846,7 @@ export function NotesDashboard({ notes, folders, tags }: Props) {
             to start drawing.
           </div>
         ) : (
-          <div className="mt-4 space-y-6">
+          <div className="mt-6 space-y-6">
             {pinnedNotes.length > 0 ? (
               <section className="space-y-2">
                 <div className="flex items-center justify-between">
