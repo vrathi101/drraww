@@ -16,6 +16,7 @@ export interface Database {
           id: string;
           is_deleted: boolean;
           owner_id: string;
+          folder_id: string | null;
           thumbnail_path: string | null;
           title: string;
           updated_at: string;
@@ -26,6 +27,7 @@ export interface Database {
           id?: string;
           is_deleted?: boolean;
           owner_id: string;
+          folder_id?: string | null;
           thumbnail_path?: string | null;
           title?: string;
           updated_at?: string;
@@ -36,11 +38,18 @@ export interface Database {
           id?: string;
           is_deleted?: boolean;
           owner_id?: string;
+          folder_id?: string | null;
           thumbnail_path?: string | null;
           title?: string;
           updated_at?: string;
         };
         Relationships: [
+          {
+            foreignKeyName: "notes_folder_id_fkey";
+            columns: ["folder_id"];
+            referencedRelation: "folders";
+            referencedColumns: ["id"];
+          },
           {
             foreignKeyName: "notes_owner_id_fkey";
             columns: ["owner_id"];
