@@ -17,6 +17,7 @@ import {
   createShare,
   revokeShare,
 } from "@/lib/notes";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 export async function createNoteAction() {
   const noteId = await createNote();
@@ -91,4 +92,31 @@ export async function createShareAction(noteId: string, allowEdit: boolean, expi
 
 export async function revokeShareAction(shareId: string) {
   await revokeShare(shareId);
+}
+
+export async function searchNotesAction(query: string) {
+  const term = (query || "").trim();
+  if (!term) return { results: [] };
+
+  const supabase = createSupabaseServerClient();
+  const {
+    data: { user },
+    error: userError,
+  } = await supabase.auth.getUser();
+  if (userError || !user) {
+    throw new Error("Unauthorized");
+  }
+
+  const { data, error } = await supabase
+    .from("notes")
+    .select("id, title, updated_at, folder_id, is_pinned, last_opened_at")
+    .eq("owner_id", user.id)
+    .eq("is_deleted", false)
+    .ilike("title", `%${term}%`)
+    .order("is_pinned", { ascending: false })
+    .order("updated_at", { ascending: false })
+    .limit(20);
+
+  if (error) throw new Error(`Search failed: ${error.message}`);
+  return { results: data ?? [] };
 }

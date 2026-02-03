@@ -1,6 +1,11 @@
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import type { ReactNode } from "react";
+import dynamic from "next/dynamic";
+
+const CommandPalette = dynamic(() => import("@/components/command-palette").then((m) => m.CommandPalette), {
+  ssr: false,
+});
 
 export default async function AppLayout({
   children,
@@ -16,5 +21,10 @@ export default async function AppLayout({
     redirect("/");
   }
 
-  return <div className="min-h-screen bg-slate-50">{children}</div>;
+  return (
+    <div className="min-h-screen bg-slate-50">
+      <CommandPalette />
+      {children}
+    </div>
+  );
 }
