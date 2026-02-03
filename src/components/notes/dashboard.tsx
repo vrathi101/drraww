@@ -15,11 +15,13 @@ import {
 } from "@/app/app/actions";
 import {
   createTagAction,
+  renameTagAction,
+  deleteTagAction,
 } from "@/app/app/tags/action";
 import { useSupabase } from "@/components/supabase-provider";
 import type { Folder, Note } from "@/lib/notes";
 import Link from "next/link";
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 
 const TAG_COLORS = [
@@ -68,6 +70,9 @@ export function NotesDashboard({ notes, folders, tags }: Props) {
   } | null>(null);
   const [newTagName, setNewTagName] = useState("");
   const [newTagColor, setNewTagColor] = useState<string | null>(null);
+  const [tagManagerOpen, setTagManagerOpen] = useState(false);
+  const [editingTag, setEditingTag] = useState<{ id: string; name: string; color: string | null } | null>(null);
+  const searchRef = useRef<HTMLInputElement | null>(null);
   const breadcrumb = useMemo(() => buildBreadcrumb(selectedFolder, folders), [selectedFolder, folders]);
   const recents = useMemo(() => {
     const list = [...notes].sort((a, b) => {
@@ -168,6 +173,22 @@ export function NotesDashboard({ notes, folders, tags }: Props) {
       setFolderParentId(null);
     }
   }, [dialog, selectedFolder]);
+
+  // Keyboard shortcuts for search (/ or Cmd/Ctrl+K)
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "/" && !e.metaKey && !e.ctrlKey) {
+        e.preventDefault();
+        searchRef.current?.focus();
+      }
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        searchRef.current?.focus();
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, []);
 
   // Persist tag filters between sessions
   useEffect(() => {
@@ -408,6 +429,21 @@ export function NotesDashboard({ notes, folders, tags }: Props) {
           >
             Open note →
           </Link>
+          <div className="flex flex-wrap gap-1">
+            {(note as Note & { note_tags?: { tag_id: string }[] }).note_tags?.map((tag) => {
+              const tagMeta = tagList.find((t) => t.id === tag.tag_id);
+              if (!tagMeta) return null;
+              return (
+                <span
+                  key={tag.tag_id}
+                  className="rounded-full border px-2 py-0.5 text-[11px] font-semibold text-slate-700"
+                  style={tagColorStyle(tagMeta.color)}
+                >
+                  {tagMeta.name}
+                </span>
+              );
+            })}
+          </div>
           {isPending ? <span className="text-xs text-slate-500">Working...</span> : null}
         </div>
       </div>
@@ -530,6 +566,7 @@ export function NotesDashboard({ notes, folders, tags }: Props) {
               placeholder="Search titles"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
+              ref={searchRef}
               className="w-full rounded-full border border-slate-200 bg-white px-4 py-2 text-sm shadow-sm outline-none ring-2 ring-transparent transition focus:border-slate-300 focus:ring-amber-200 sm:w-56"
             />
             <select
@@ -544,7 +581,7 @@ export function NotesDashboard({ notes, folders, tags }: Props) {
               <option value="created">Created (newest)</option>
               <option value="title">Title A-Z</option>
             </select>
-            <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
               {tagList.map((tag) => {
                 const active = selectedTags.includes(tag.id);
                 return (
@@ -561,7 +598,11 @@ export function NotesDashboard({ notes, folders, tags }: Props) {
                         ? "border-amber-300 bg-amber-100 text-amber-800"
                         : "border-slate-200 bg-white text-slate-700 hover:border-slate-300"
                     }`}
-                    style={tag.color ? { borderColor: tag.color, color: tag.color } : undefined}
+                    style={
+                      tag.color
+                        ? { borderColor: tag.color, color: tag.color, backgroundColor: tag.color + "22" }
+                        : undefined
+                    }
                   >
                     {tag.name}
                   </button>
@@ -589,14 +630,24 @@ export function NotesDashboard({ notes, folders, tags }: Props) {
                     />
                   ))}
                 </div>
-                <button
-                  type="button"
-                  onClick={handleCreateTag}
-                  className="text-xs font-semibold text-amber-700 hover:text-amber-800"
-                  disabled={isPending}
-                >
-                  Add
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setTagManagerOpen(true)}
+                    className="text-xs text-slate-500 hover:text-slate-700"
+                    disabled={isPending}
+                  >
+                    Manage
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleCreateTag}
+                    className="text-xs font-semibold text-amber-700 hover:text-amber-800"
+                    disabled={isPending}
+                  >
+                    Add
+                  </button>
+                </div>
               </div>
               {selectedTags.length > 0 ? (
                 <button
@@ -982,6 +1033,132 @@ export function NotesDashboard({ notes, folders, tags }: Props) {
           </div>
         </div>
       ) : null}
+      {tagManagerOpen ? (
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40 px-4">
+          <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl">
+            <div className="mb-4 flex items-center justify-between">
+              <div>
+                <h3 className="text-lg font-semibold text-slate-900">Manage tags</h3>
+                <p className="text-sm text-slate-600">Rename, recolor, or delete tags.</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setTagManagerOpen(false)}
+                className="text-slate-500 hover:text-slate-700"
+                aria-label="Close"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="space-y-3 max-h-[320px] overflow-y-auto pr-1">
+              {tagList.length === 0 ? (
+                <p className="text-sm text-slate-500">No tags yet.</p>
+              ) : (
+                tagList.map((tag) => (
+                  <div
+                    key={tag.id}
+                    className="flex items-center justify-between rounded-xl border border-slate-200 px-3 py-2"
+                  >
+                    <div className="flex items-center gap-2">
+                      <span
+                        className="h-3 w-3 rounded-full border border-slate-200"
+                        style={tag.color ? { backgroundColor: tag.color, borderColor: tag.color } : undefined}
+                      />
+                      <span className="text-sm font-semibold text-slate-800">{tag.name}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setEditingTag(tag)}
+                        className="rounded-full border border-slate-200 px-3 py-1 text-xs font-medium text-slate-700 hover:border-slate-400"
+                      >
+                        Edit
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          startTransition(async () => {
+                            await deleteTagAction(tag.id);
+                            setTagList((prev) => prev.filter((t) => t.id !== tag.id));
+                            setSelectedTags((prev) => prev.filter((id) => id !== tag.id));
+                            router.refresh();
+                          });
+                        }}
+                        className="rounded-full border border-rose-200 px-3 py-1 text-xs font-semibold text-rose-700 hover:border-rose-400"
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+            {editingTag ? (
+              <div className="mt-4 rounded-xl border border-slate-200 p-3">
+                <h4 className="text-sm font-semibold text-slate-800">Edit tag</h4>
+                <div className="mt-2 flex flex-col gap-2">
+                  <input
+                    type="text"
+                    value={editingTag.name}
+                    onChange={(e) => setEditingTag({ ...editingTag, name: e.target.value })}
+                    className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm shadow-sm outline-none ring-2 ring-transparent transition focus:border-amber-300 focus:ring-amber-100"
+                  />
+                  <div className="flex flex-wrap items-center gap-2">
+                    {TAG_COLORS.map((color) => (
+                      <button
+                        key={color}
+                        type="button"
+                        onClick={() => setEditingTag({ ...editingTag, color })}
+                        className={`h-6 w-6 rounded-full border ${
+                          editingTag.color === color ? "border-slate-800 ring-2 ring-slate-300" : "border-slate-200"
+                        }`}
+                        style={{ backgroundColor: color }}
+                        aria-label={`Pick ${color}`}
+                      />
+                    ))}
+                    <button
+                      type="button"
+                      onClick={() => setEditingTag({ ...editingTag, color: null })}
+                      className="rounded-full border border-slate-200 px-3 py-1 text-xs text-slate-600 hover:border-slate-400"
+                    >
+                      Clear
+                    </button>
+                  </div>
+                  <div className="flex items-center justify-end gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setEditingTag(null)}
+                      className="rounded-full border border-slate-200 px-3 py-1 text-xs font-medium text-slate-700 hover:border-slate-300"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (!editingTag.name.trim()) {
+                          setToast({ type: "error", message: "Name cannot be empty" });
+                          return;
+                        }
+                        startTransition(async () => {
+                          await renameTagAction(editingTag.id, editingTag.name.trim(), editingTag.color);
+                          setTagList((prev) =>
+                            prev.map((t) => (t.id === editingTag.id ? editingTag : t)),
+                          );
+                          setEditingTag(null);
+                          router.refresh();
+                        });
+                      }}
+                      className="rounded-full bg-emerald-600 px-4 py-1 text-sm font-semibold text-white shadow-sm hover:bg-emerald-700 disabled:opacity-60"
+                    >
+                      Save
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
       {toast ? (
         <div className="fixed bottom-4 right-4 z-40 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm shadow-xl">
           <div className="flex items-center gap-2">
@@ -1023,6 +1200,16 @@ function formatUpdatedAt(timestamp: string) {
     month: "short",
     day: "numeric",
   });
+}
+
+function tagColorStyle(color: string | null) {
+  return color
+    ? {
+        borderColor: color,
+        color,
+        backgroundColor: color + "22",
+      }
+    : undefined;
 }
 
 function computeDepth(folder: Folder, folders: Folder[], seen = new Set<string>()): number {
