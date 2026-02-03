@@ -261,6 +261,52 @@ export interface Database {
           },
         ];
       };
+      note_attachments: {
+        Row: {
+          created_at: string;
+          file_name: string | null;
+          id: string;
+          mime_type: string | null;
+          note_id: string;
+          owner_id: string;
+          path: string;
+          size: number | null;
+        };
+        Insert: {
+          created_at?: string;
+          file_name?: string | null;
+          id?: string;
+          mime_type?: string | null;
+          note_id: string;
+          owner_id: string;
+          path: string;
+          size?: number | null;
+        };
+        Update: {
+          created_at?: string;
+          file_name?: string | null;
+          id?: string;
+          mime_type?: string | null;
+          note_id?: string;
+          owner_id?: string;
+          path?: string;
+          size?: number | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "note_attachments_note_id_fkey";
+            columns: ["note_id"];
+            referencedRelation: "notes";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "note_attachments_owner_id_fkey";
+            columns: ["owner_id"];
+            referencedRelation: "users";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
     };
     Views: Record<string, never>;
     Functions: Record<string, never>;

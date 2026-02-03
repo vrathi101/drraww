@@ -5,6 +5,7 @@ import { Database } from "./database.types";
 export type Note = Database["public"]["Tables"]["notes"]["Row"];
 export type Folder = Database["public"]["Tables"]["folders"]["Row"];
 export type NoteShare = Database["public"]["Tables"]["note_shares"]["Row"];
+export type NoteAttachment = Database["public"]["Tables"]["note_attachments"]["Row"];
 
 async function getUserIdOrRedirect() {
   const supabase = createSupabaseServerClient();
