@@ -1,4 +1,4 @@
-import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { createSupabaseServiceClient } from "@/lib/supabase/service";
 import { notFound } from "next/navigation";
 import dynamic from "next/dynamic";
 import type { TLEditorSnapshot, TLStoreSnapshot } from "tldraw";
@@ -15,7 +15,7 @@ function coerceSnapshot(value: unknown): TLEditorSnapshot | TLStoreSnapshot | un
 }
 
 export default async function SharedNotePage({ params }: { params: { token: string } }) {
-  const supabase = createSupabaseServerClient();
+  const supabase = createSupabaseServiceClient();
   const { data, error } = await supabase
     .from("note_shares")
     .select("allow_edit, expires_at, notes:note_id (id, title, doc, updated_at)")

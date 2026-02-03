@@ -1,12 +1,12 @@
 import { NextResponse } from "next/server";
-import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { createSupabaseServiceClient } from "@/lib/supabase/service";
 import type { Json } from "@/lib/database.types";
 
 export async function GET(
   _request: Request,
   { params }: { params: { token: string } },
 ) {
-  const supabase = createSupabaseServerClient();
+  const supabase = createSupabaseServiceClient();
   const { data: share, error: shareError } = await supabase
     .from("note_shares")
     .select("allow_edit, expires_at, notes:note_id (id, title, doc, updated_at)")
@@ -37,7 +37,7 @@ export async function PUT(
   request: Request,
   { params }: { params: { token: string } },
 ) {
-  const supabase = createSupabaseServerClient();
+  const supabase = createSupabaseServiceClient();
   const { data: share, error: shareError } = await supabase
     .from("note_shares")
     .select("allow_edit, note_id, owner_id")
