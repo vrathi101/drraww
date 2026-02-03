@@ -348,12 +348,24 @@ export async function listShares(noteId: string): Promise<NoteShare[]> {
   return (data as NoteShare[] | null) ?? [];
 }
 
-export async function createShare(noteId: string, allowEdit: boolean, expiresAt?: string | null) {
+export async function createShare(
+  noteId: string,
+  allowEdit: boolean,
+  expiresAt?: string | null,
+  passwordHash?: string | null,
+) {
   const { supabase, user } = await getUserIdOrRedirect();
   const token = crypto.randomUUID();
   const { error, data } = await supabase
     .from("note_shares")
-    .insert({ note_id: noteId, owner_id: user.id, token, allow_edit: allowEdit, expires_at: expiresAt ?? null })
+    .insert({
+      note_id: noteId,
+      owner_id: user.id,
+      token,
+      allow_edit: allowEdit,
+      expires_at: expiresAt ?? null,
+      password_hash: passwordHash ?? null,
+    })
     .select("*")
     .single();
   if (error || !data) throw new Error(`Failed to create share link: ${error?.message}`);

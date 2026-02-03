@@ -202,9 +202,10 @@ function EditorShell({
   const lastThumbnailMsRef = useRef(0);
   const lastRevisionMsRef = useRef(0);
   const [shareModal, setShareModal] = useState(false);
-  const [shareLinks, setShareLinks] = useState<{ id: string; token: string; allow_edit: boolean; expires_at: string | null }[]>([]);
+  const [shareLinks, setShareLinks] = useState<{ id: string; token: string; allow_edit: boolean; expires_at: string | null; password_hash?: string | null }[]>([]);
   const [shareLoading, setShareLoading] = useState(false);
   const [shareExpiry, setShareExpiry] = useState<"never" | "1d" | "7d">("7d");
+  const [sharePassword, setSharePassword] = useState("");
   const [saveStatus, setSaveStatus] = useState<SaveState>("saved");
   const [isOnline, setIsOnline] = useState(true);
   const [isUploading, setIsUploading] = useState(false);
@@ -827,11 +828,26 @@ function EditorShell({
                   <option value="never">Never</option>
                 </select>
               </div>
+              <div className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2">
+                <span className="text-xs font-semibold text-slate-700">Password (optional)</span>
+                <input
+                  type="password"
+                  value={sharePassword}
+                  onChange={(e) => setSharePassword(e.target.value)}
+                  className="flex-1 rounded-lg border border-slate-200 px-3 py-1 text-xs outline-none"
+                  placeholder="Set a password"
+                />
+              </div>
               <button
                 type="button"
                 onClick={async () => {
                   try {
-                    const { link } = await createShareAction(noteId, false, resolveExpiry(shareExpiry));
+                    const { link } = await createShareAction(
+                      noteId,
+                      false,
+                      resolveExpiry(shareExpiry),
+                      sharePassword || null,
+                    );
                     setShareLinks((prev) => [link, ...prev]);
                   } catch (err) {
                     console.error(err);
@@ -845,7 +861,12 @@ function EditorShell({
                 type="button"
                 onClick={async () => {
                   try {
-                    const { link } = await createShareAction(noteId, true, resolveExpiry(shareExpiry));
+                    const { link } = await createShareAction(
+                      noteId,
+                      true,
+                      resolveExpiry(shareExpiry),
+                      sharePassword || null,
+                    );
                     setShareLinks((prev) => [link, ...prev]);
                   } catch (err) {
                     console.error(err);
@@ -885,11 +906,18 @@ function EditorShell({
                           className="flex flex-col gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2"
                         >
                           <div className="flex items-center justify-between text-xs text-slate-600">
-                            <span>
-                              {link.allow_edit ? "Edit" : "View"} link
-                              {link.expires_at
-                                ? ` • expires ${new Date(link.expires_at).toLocaleDateString()}`
-                                : " • no expiry"}
+                            <span className="flex items-center gap-2">
+                              <span>
+                                {link.allow_edit ? "Edit" : "View"} link
+                                {link.expires_at
+                                  ? ` • expires ${new Date(link.expires_at).toLocaleDateString()}`
+                                  : " • no expiry"}
+                              </span>
+                              {link.password_hash ? (
+                                <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-800">
+                                  Password
+                                </span>
+                              ) : null}
                             </span>
                             <div className="flex items-center gap-2">
                               <button

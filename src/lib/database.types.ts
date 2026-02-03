@@ -225,6 +225,7 @@ export interface Database {
           expires_at: string | null;
           id: string;
           note_id: string;
+          password_hash: string | null;
           owner_id: string;
           token: string;
         };
@@ -234,6 +235,7 @@ export interface Database {
           expires_at?: string | null;
           id?: string;
           note_id: string;
+          password_hash?: string | null;
           owner_id: string;
           token: string;
         };
@@ -243,6 +245,7 @@ export interface Database {
           expires_at?: string | null;
           id?: string;
           note_id?: string;
+          password_hash?: string | null;
           owner_id?: string;
           token?: string;
         };

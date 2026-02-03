@@ -1,6 +1,11 @@
 import { NextResponse } from "next/server";
 import { createSupabaseServiceClient } from "@/lib/supabase/service";
 import type { Json } from "@/lib/database.types";
+import { createHash } from "crypto";
+
+function hashPassword(value: string) {
+  return createHash("sha256").update(value).digest("hex");
+}
 
 export async function GET(
   _request: Request,
@@ -9,7 +14,7 @@ export async function GET(
   const supabase = createSupabaseServiceClient();
   const { data: share, error: shareError } = await supabase
     .from("note_shares")
-    .select("allow_edit, expires_at, notes:note_id (id, title, doc, updated_at)")
+    .select("allow_edit, expires_at, password_hash, notes:note_id (id, title, doc, updated_at)")
     .eq("token", params.token)
     .maybeSingle();
 
@@ -20,11 +25,19 @@ export async function GET(
   const typed = share as {
     allow_edit: boolean;
     expires_at: string | null;
+    password_hash: string | null;
     notes: { id: string; title: string; doc: Json; updated_at: string };
   };
 
   if (typed.expires_at && new Date(typed.expires_at).getTime() < Date.now()) {
     return NextResponse.json({ error: "Link expired" }, { status: 410 });
+  }
+
+  if (typed.password_hash) {
+    const supplied = _request.headers.get("x-share-password") || "";
+    if (!supplied || hashPassword(supplied) !== typed.password_hash) {
+      return NextResponse.json({ error: "Password required" }, { status: 401 });
+    }
   }
 
   return NextResponse.json({

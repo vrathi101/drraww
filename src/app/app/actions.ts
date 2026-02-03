@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { createHash } from "crypto";
 import {
   createFolder,
   createNote,
@@ -85,8 +86,14 @@ export async function listSharesAction(noteId: string) {
   return { links };
 }
 
-export async function createShareAction(noteId: string, allowEdit: boolean, expiresAt?: string | null) {
-  const link = await createShare(noteId, allowEdit, expiresAt);
+export async function createShareAction(
+  noteId: string,
+  allowEdit: boolean,
+  expiresAt?: string | null,
+  password?: string | null,
+) {
+  const passwordHash = password ? createHash("sha256").update(password).digest("hex") : null;
+  const link = await createShare(noteId, allowEdit, expiresAt, passwordHash);
   return { link };
 }
 
