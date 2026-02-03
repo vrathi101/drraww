@@ -58,6 +58,7 @@ export function NotesDashboard({ notes, folders, tags }: Props) {
   const [dialog, setDialog] = useState<DialogState>(null);
   const [folderNameInput, setFolderNameInput] = useState("");
   const [folderParentId, setFolderParentId] = useState<string | null>(null);
+  const [collapsedFolders, setCollapsedFolders] = useState<Set<string>>(new Set());
   const [tagList, setTagList] = useState(tags);
   const [sort, setSort] = useState<"updated" | "created" | "title" | "last_opened">("updated");
   const [toast, setToast] = useState<{ type: "error" | "success"; message: string } | null>(
@@ -82,6 +83,8 @@ export function NotesDashboard({ notes, folders, tags }: Props) {
     });
     return list.slice(0, 5);
   }, [notes]);
+
+  const collapsedKey = "drraww:collapsedFolders";
 
   const filtered = useMemo(() => {
     const term = search.trim().toLowerCase();
@@ -161,6 +164,24 @@ export function NotesDashboard({ notes, folders, tags }: Props) {
       isMounted = false;
     };
   }, [notes, supabase.storage]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      const raw = window.localStorage.getItem(collapsedKey);
+      if (raw) {
+        const ids = JSON.parse(raw) as string[];
+        setCollapsedFolders(new Set(ids));
+      }
+    } catch {
+      // ignore
+    }
+  }, [collapsedKey]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    window.localStorage.setItem(collapsedKey, JSON.stringify(Array.from(collapsedFolders)));
+  }, [collapsedFolders, collapsedKey]);
 
   useEffect(() => {
     if (dialog?.type === "folder") {
@@ -268,6 +289,114 @@ export function NotesDashboard({ notes, folders, tags }: Props) {
     setDialog({ type: "folder-parent", folder });
   };
 
+  const toggleCollapsed = (folderId: string) => {
+    setCollapsedFolders((prev) => {
+      const next = new Set(prev);
+      if (next.has(folderId)) {
+        next.delete(folderId);
+      } else {
+        next.add(folderId);
+      }
+      return next;
+    });
+  };
+
+  const handleDropOnFolder = (folder: Folder | null, e: React.DragEvent) => {
+    e.preventDefault();
+    const noteId = e.dataTransfer.getData("text/note-id");
+    const folderId = e.dataTransfer.getData("text/folder-id");
+    if (noteId) {
+      handleMoveNote(noteId, folder ? folder.id : null);
+      return;
+    }
+    if (folderId) {
+      if (!folder || folder.id === folderId) return;
+      const descendants = new Set(getDescendantIds(folderId, folders));
+      if (descendants.has(folder.id)) return;
+      startTransition(async () => {
+        await moveFolderParentAction(folderId, folder.id);
+        setToast({ type: "success", message: "Folder moved" });
+        router.refresh();
+      });
+    }
+  };
+
+  const renderFolderTree = (parentId: string | null, depth = 0) => {
+    const children = folders.filter((f) => f.parent_id === parentId);
+    if (children.length === 0) return null;
+    return children.map((folder) => {
+      const isCollapsed = collapsedFolders.has(folder.id);
+      const childNodes = renderFolderTree(folder.id, depth + 1);
+      return (
+        <div
+          key={folder.id}
+          className={`flex flex-col rounded-xl ${selectedFolder === folder.id ? "bg-amber-50" : ""}`}
+          onDragOver={(e) => e.preventDefault()}
+          onDrop={(e) => handleDropOnFolder(folder, e)}
+        >
+          <div
+            className={`flex items-center justify-between rounded-xl px-3 py-2 text-sm transition ${
+              selectedFolder === folder.id
+                ? "text-amber-800"
+                : "text-slate-700 hover:bg-slate-100"
+            }`}
+            style={{ paddingLeft: `${12 + depth * 12}px` }}
+            draggable
+            onDragStart={(e) => e.dataTransfer.setData("text/folder-id", folder.id)}
+          >
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                className="text-xs text-slate-500"
+                onClick={(evt) => {
+                  evt.stopPropagation();
+                  toggleCollapsed(folder.id);
+                }}
+              >
+                {isCollapsed ? "▸" : "▾"}
+              </button>
+              <button
+                type="button"
+                className="flex-1 text-left font-semibold"
+                onClick={() => setSelectedFolder(folder.id)}
+              >
+                {folder.name}
+              </button>
+            </div>
+            <div className="flex items-center gap-1 text-xs">
+              <button
+                type="button"
+                onClick={() => handleChangeFolderParent(folder)}
+                className="rounded px-1 text-slate-500 hover:bg-slate-200"
+                disabled={isPending}
+                title="Move folder"
+              >
+                ⇄
+              </button>
+              <button
+                type="button"
+                onClick={() => handleRenameFolder(folder)}
+                className="rounded px-1 text-slate-500 hover:bg-slate-200"
+                disabled={isPending}
+              >
+                ✎
+              </button>
+              <button
+                type="button"
+                onClick={() => handleDeleteFolder(folder)}
+                className="rounded px-1 text-rose-500 hover:bg-rose-100"
+                disabled={isPending}
+              >
+                🗑
+              </button>
+            </div>
+          </div>
+          {!isCollapsed ? childNodes : null}
+        </div>
+      );
+    });
+  };
+
   const handleMoveNote = (noteId: string, folderId: string | null) => {
     startTransition(async () => {
       await moveNoteToFolderAction(noteId, folderId);
@@ -311,6 +440,8 @@ export function NotesDashboard({ notes, folders, tags }: Props) {
     <article
       key={note.id}
       className="group flex h-full flex-col justify-between overflow-hidden rounded-2xl border border-slate-200 bg-white/90 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
+      draggable
+      onDragStart={(e) => e.dataTransfer.setData("text/note-id", note.id)}
     >
       <Link href={`/app/note/${note.id}`} className="block">
         <div className="relative aspect-[4/3] w-full overflow-hidden bg-slate-100">
@@ -465,67 +596,23 @@ export function NotesDashboard({ notes, folders, tags }: Props) {
           </button>
         </div>
         <div className="flex flex-col gap-2">
-          <button
-            type="button"
-            onClick={() => setSelectedFolder(null)}
+          <div
             className={`flex items-center justify-between rounded-xl px-3 py-2 text-sm font-semibold transition ${
               selectedFolder === null
                 ? "bg-amber-100 text-amber-800"
                 : "text-slate-700 hover:bg-slate-100"
             }`}
+            onDragOver={(e) => e.preventDefault()}
+            onDrop={(e) => handleDropOnFolder(null, e)}
           >
-            <span>All notes</span>
+            <button type="button" onClick={() => setSelectedFolder(null)} className="flex-1 text-left">
+              All notes
+            </button>
             <span className="text-xs text-slate-500">{notes.length}</span>
-          </button>
-          {folders.map((folder) => {
-            const depth = computeDepth(folder, folders);
-            return (
-              <div
-                key={folder.id}
-                className={`flex items-center justify-between rounded-xl px-3 py-2 text-sm transition ${
-                  selectedFolder === folder.id
-                    ? "bg-amber-100 text-amber-800"
-                    : "text-slate-700 hover:bg-slate-100"
-                }`}
-                style={{ paddingLeft: `${12 + depth * 12}px` }}
-              >
-                <button
-                  type="button"
-                  className="flex-1 text-left font-semibold"
-                  onClick={() => setSelectedFolder(folder.id)}
-                >
-                  {folder.name}
-                </button>
-                <div className="flex items-center gap-1 text-xs">
-                  <button
-                    type="button"
-                    onClick={() => handleChangeFolderParent(folder)}
-                    className="rounded px-1 text-slate-500 hover:bg-slate-200"
-                    disabled={isPending}
-                    title="Move folder"
-                  >
-                    ⇄
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleRenameFolder(folder)}
-                    className="rounded px-1 text-slate-500 hover:bg-slate-200"
-                    disabled={isPending}
-                  >
-                    ✎
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleDeleteFolder(folder)}
-                    className="rounded px-1 text-rose-500 hover:bg-rose-100"
-                    disabled={isPending}
-                  >
-                    🗑
-                  </button>
-                </div>
-              </div>
-            );
-          })}
+          </div>
+          <div className="flex flex-col gap-1">
+            {renderFolderTree(null)}
+          </div>
         </div>
       </aside>
 
@@ -1210,15 +1297,6 @@ function tagColorStyle(color: string | null) {
         backgroundColor: color + "22",
       }
     : undefined;
-}
-
-function computeDepth(folder: Folder, folders: Folder[], seen = new Set<string>()): number {
-  if (!folder.parent_id) return 0;
-  if (seen.has(folder.id)) return 0;
-  seen.add(folder.id);
-  const parent = folders.find((f) => f.id === folder.parent_id);
-  if (!parent) return 0;
-  return 1 + computeDepth(parent, folders, seen);
 }
 
 function buildBreadcrumb(selectedFolder: string | null, folders: Folder[]) {
