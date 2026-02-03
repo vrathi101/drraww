@@ -3,6 +3,9 @@ import { createSupabaseServiceClient } from "@/lib/supabase/service";
 import type { Json } from "@/lib/database.types";
 import { createHash } from "crypto";
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 function hashPassword(value: string) {
   return createHash("sha256").update(value).digest("hex");
 }

@@ -31,6 +31,7 @@ export default function ShareClient({ token }: { token: string }) {
     setError(null);
     try {
       const res = await fetch(`/api/share/${token}`, {
+        cache: "no-store",
         headers: pw ? { "x-share-password": pw } : undefined,
       });
       if (!res.ok) {
