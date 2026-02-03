@@ -599,14 +599,14 @@ export function NotesDashboard({ notes, folders, tags }: Props) {
   );
 
   return (
-    <div className="flex flex-col gap-6 lg:flex-row">
-      <aside className="w-full rounded-3xl border border-slate-200 bg-white/80 p-5 shadow-sm backdrop-blur lg:w-72">
-        <div className="mb-4 flex items-center justify-between">
+    <div className="mx-auto flex max-w-7xl flex-col gap-6 px-4 pb-12 pt-6 lg:flex-row">
+      <aside className="w-full rounded-2xl border border-slate-200 bg-white p-4 shadow-sm lg:w-64">
+        <div className="mb-3 flex items-center justify-between">
           <div className="text-sm font-semibold text-slate-800">Folders</div>
           <button
             type="button"
             onClick={handleCreateFolder}
-            className="rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-800 transition hover:bg-amber-200"
+            className="rounded-lg border border-amber-200 px-2 py-1 text-xs font-semibold text-amber-700 hover:bg-amber-50"
             disabled={isPending}
           >
             + New
@@ -614,7 +614,7 @@ export function NotesDashboard({ notes, folders, tags }: Props) {
         </div>
         <div className="flex flex-col gap-2">
           <div
-            className={`flex items-center justify-between rounded-2xl px-3 py-2 text-sm font-semibold transition ${
+            className={`flex items-center justify-between rounded-xl px-3 py-2 text-sm font-semibold transition ${
               selectedFolder === null
                 ? "bg-amber-100 text-amber-800 shadow-sm"
                 : "text-slate-700 hover:bg-slate-100"
@@ -635,75 +635,60 @@ export function NotesDashboard({ notes, folders, tags }: Props) {
             </button>
             <span className="text-xs text-slate-500">{notes.length}</span>
           </div>
-          <div className="flex flex-col gap-1">
-            {renderFolderTree(null)}
-          </div>
+          <div className="flex flex-col gap-1">{renderFolderTree(null)}</div>
         </div>
       </aside>
 
-      <div className="flex-1">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="space-y-1">
-            <p className="text-sm uppercase tracking-[0.2em] text-slate-500">
-              Dashboard
-            </p>
-            <h1 className="text-3xl font-semibold text-slate-900">
-              Your notes
-            </h1>
-            <p className="text-sm text-slate-600">
-              Create, search, filter by folder, or open a note to continue drawing.
-            </p>
-            <div className="flex flex-wrap items-center gap-2 text-xs font-semibold text-slate-600">
-              {breadcrumb.map((crumb, idx) => (
-                <div key={`${crumb.id ?? "root"}-${idx}`} className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setSelectedFolder(crumb.id)}
-                    className={`rounded-full border px-3 py-1 transition ${
-                      crumb.id === selectedFolder
-                        ? "border-amber-300 bg-amber-100 text-amber-800"
-                        : "border-slate-200 bg-white hover:border-slate-300"
-                    }`}
-                  >
-                    {crumb.name}
-                  </button>
-                  {idx < breadcrumb.length - 1 ? <span className="text-slate-400">/</span> : null}
+      <div className="flex-1 space-y-4">
+        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="space-y-1">
+              <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Dashboard</p>
+              <div className="flex flex-wrap items-center gap-3">
+                <h1 className="text-3xl font-semibold text-slate-900">Your notes</h1>
+                <div className="flex flex-wrap items-center gap-1 text-xs font-semibold text-slate-600">
+                  {breadcrumb.map((crumb, idx) => (
+                    <div key={`${crumb.id ?? "root"}-${idx}`} className="flex items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() => setSelectedFolder(crumb.id)}
+                        className={`rounded-lg px-2 py-1 transition ${
+                          crumb.id === selectedFolder
+                            ? "bg-amber-100 text-amber-800"
+                            : "text-slate-600 hover:bg-slate-100"
+                        }`}
+                      >
+                        {crumb.name}
+                      </button>
+                      {idx < breadcrumb.length - 1 ? <span className="text-slate-400">/</span> : null}
+                    </div>
+                  ))}
                 </div>
-              ))}
+              </div>
+              <p className="text-sm text-slate-600">
+                Create, search, filter by folder, or open a note to continue drawing.
+              </p>
             </div>
-          </div>
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-            <input
-              type="search"
-              placeholder="Search titles"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              ref={searchRef}
-              className="w-full rounded-full border border-slate-200 bg-white px-4 py-2 text-sm shadow-sm outline-none ring-2 ring-transparent transition focus:border-slate-300 focus:ring-amber-200 sm:w-56"
-            />
-            <select
-              value={sort}
-              onChange={(e) =>
-                setSort(e.target.value as "updated" | "created" | "title" | "last_opened")
-              }
-              className="rounded-full border border-slate-200 bg-white px-3 py-2 text-sm shadow-sm outline-none transition focus:border-amber-300"
+            <button
+              type="button"
+              onClick={handleCreate}
+              disabled={isPending}
+              className="inline-flex items-center justify-center rounded-full bg-black px-5 py-2.5 text-sm font-semibold text-white shadow-lg shadow-black/10 transition hover:bg-black/90 disabled:cursor-not-allowed disabled:opacity-60"
             >
-              <option value="updated">Last edited</option>
-              <option value="last_opened">Last opened</option>
-              <option value="created">Created (newest)</option>
-              <option value="title">Title A-Z</option>
-            </select>
+              New note
+            </button>
+          </div>
         </div>
 
-        <div className="mt-2 grid gap-3 rounded-3xl border border-slate-200 bg-white/90 p-4 shadow-sm lg:grid-cols-[1fr_auto_auto] lg:items-center">
-          <div className="flex flex-wrap items-center gap-2">
+        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <div className="flex flex-wrap items-center gap-3">
             <input
               type="search"
               placeholder="Search titles"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               ref={searchRef}
-              className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm shadow-sm outline-none ring-2 ring-transparent transition focus:border-slate-300 focus:ring-amber-200 sm:w-72"
+              className="w-full max-w-sm rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm shadow-sm outline-none ring-2 ring-transparent transition focus:border-slate-300 focus:ring-amber-200"
             />
             <select
               value={sort}
@@ -794,19 +779,10 @@ export function NotesDashboard({ notes, folders, tags }: Props) {
               ) : null}
             </div>
           </div>
-          <button
-            type="button"
-            onClick={handleCreate}
-            disabled={isPending}
-            className="inline-flex items-center justify-center rounded-full bg-black px-6 py-3 text-sm font-semibold text-white shadow-lg shadow-black/10 transition hover:bg-black/90 disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            New note
-          </button>
-        </div>
         </div>
 
         {recents.length > 0 ? (
-          <div className="mt-6 rounded-3xl border border-slate-200 bg-white/90 p-4 shadow-sm">
+          <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
             <div className="mb-3 flex items-center justify-between">
               <div className="text-sm font-semibold text-slate-800">Recents</div>
               <span className="text-xs text-slate-500">Last opened</span>
@@ -833,7 +809,7 @@ export function NotesDashboard({ notes, folders, tags }: Props) {
         ) : null}
 
         {filtered.length === 0 ? (
-          <div className="mt-4 rounded-2xl border border-dashed border-slate-300 bg-white/90 p-10 text-slate-600 shadow-sm">
+          <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-10 text-slate-600 shadow-sm">
             No notes yet. Click{" "}
             <button
               type="button"
@@ -846,7 +822,7 @@ export function NotesDashboard({ notes, folders, tags }: Props) {
             to start drawing.
           </div>
         ) : (
-          <div className="mt-6 space-y-6">
+          <div className="space-y-6">
             {pinnedNotes.length > 0 ? (
               <section className="space-y-2">
                 <div className="flex items-center justify-between">
