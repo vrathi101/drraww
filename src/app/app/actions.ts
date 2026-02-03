@@ -7,6 +7,7 @@ import {
   deleteFolder,
   deleteNote,
   moveNoteToFolder,
+  moveFolderParent,
   renameFolder,
   renameNote,
   togglePinNote,
@@ -40,8 +41,8 @@ export async function createFolderAction(name: string, parentId: string | null =
   return { id };
 }
 
-export async function renameFolderAction(folderId: string, name: string) {
-  await renameFolder(folderId, name);
+export async function renameFolderAction(folderId: string, name: string, parentId?: string | null) {
+  await renameFolder(folderId, name, parentId);
   revalidatePath("/app");
 }
 
@@ -52,6 +53,11 @@ export async function deleteFolderAction(folderId: string) {
 
 export async function moveNoteToFolderAction(noteId: string, folderId: string | null) {
   await moveNoteToFolder(noteId, folderId);
+  revalidatePath("/app");
+}
+
+export async function moveFolderParentAction(folderId: string, parentId: string | null) {
+  await moveFolderParent(folderId, parentId);
   revalidatePath("/app");
 }
 

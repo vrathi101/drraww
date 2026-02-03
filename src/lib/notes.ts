@@ -146,18 +146,56 @@ export async function createFolder(name: string, parentId: string | null = null)
   return data.id;
 }
 
-export async function renameFolder(folderId: string, name: string) {
+export async function renameFolder(folderId: string, name: string, parentId?: string | null) {
   const { supabase, user } = await getUserIdOrRedirect();
   const trimmed = name.trim();
   if (!trimmed) {
     throw new Error("Name cannot be empty");
   }
+
+  const { data: folders, error: foldersError } = await supabase
+    .from("folders")
+    .select("id,parent_id")
+    .eq("owner_id", user.id);
+  if (foldersError) throw new Error(`Failed to load folders: ${foldersError.message}`);
+  const all = (folders as { id: string; parent_id: string | null }[] | null) ?? [];
+  const current = all.find((f) => f.id === folderId);
+  const nextParent = parentId === undefined ? current?.parent_id ?? null : parentId;
+  if (nextParent === folderId) {
+    throw new Error("Folder cannot be its own parent");
+  }
+  if (nextParent && isDescendant(all, nextParent, folderId)) {
+    throw new Error("Cannot move folder into its own descendant");
+  }
+
   const { error } = await supabase
     .from("folders")
-    .update({ name: trimmed })
+    .update({ name: trimmed, parent_id: nextParent })
     .eq("id", folderId)
     .eq("owner_id", user.id);
   if (error) throw new Error(`Failed to rename folder: ${error.message}`);
+}
+
+export async function moveFolderParent(folderId: string, parentId: string | null) {
+  const { supabase, user } = await getUserIdOrRedirect();
+  const { data: folders, error: foldersError } = await supabase
+    .from("folders")
+    .select("id,parent_id")
+    .eq("owner_id", user.id);
+  if (foldersError) throw new Error(`Failed to load folders: ${foldersError.message}`);
+  const all = (folders as { id: string; parent_id: string | null }[] | null) ?? [];
+  if (parentId === folderId) {
+    throw new Error("Folder cannot be its own parent");
+  }
+  if (parentId && isDescendant(all, parentId, folderId)) {
+    throw new Error("Cannot move folder into its own descendant");
+  }
+  const { error } = await supabase
+    .from("folders")
+    .update({ parent_id: parentId })
+    .eq("id", folderId)
+    .eq("owner_id", user.id);
+  if (error) throw new Error(`Failed to move folder: ${error.message}`);
 }
 
 export async function deleteFolder(folderId: string) {
@@ -294,4 +332,18 @@ export async function markNoteOpened(noteId: string) {
   if (error) {
     console.warn(`Failed to record last opened: ${error.message}`);
   }
+}
+
+function isDescendant(
+  folders: { id: string; parent_id: string | null }[],
+  candidateParent: string,
+  targetId: string,
+): boolean {
+  const map = new Map(folders.map((f) => [f.id, f.parent_id]));
+  let current: string | null | undefined = candidateParent;
+  while (current) {
+    if (current === targetId) return true;
+    current = map.get(current) ?? null;
+  }
+  return false;
 }

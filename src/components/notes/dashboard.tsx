@@ -6,6 +6,7 @@ import {
   deleteNoteAction,
   deleteFolderAction,
   moveNoteToFolderAction,
+  moveFolderParentAction,
   renameNoteAction,
   renameFolderAction,
   togglePinNoteAction,
@@ -43,6 +44,7 @@ export function NotesDashboard({ notes, folders, tags }: Props) {
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [dialog, setDialog] = useState<DialogState>(null);
   const [folderNameInput, setFolderNameInput] = useState("");
+  const [folderParentId, setFolderParentId] = useState<string | null>(null);
   const [tagList, setTagList] = useState(tags);
   const [sort, setSort] = useState<"updated" | "created" | "title" | "last_opened">("updated");
   const [toast, setToast] = useState<{ type: "error" | "success"; message: string } | null>(
@@ -54,6 +56,7 @@ export function NotesDashboard({ notes, folders, tags }: Props) {
     selected: string[];
   } | null>(null);
   const [newTagName, setNewTagName] = useState("");
+  const breadcrumb = useMemo(() => buildBreadcrumb(selectedFolder, folders), [selectedFolder, folders]);
 
   const filtered = useMemo(() => {
     const term = search.trim().toLowerCase();
@@ -135,10 +138,14 @@ export function NotesDashboard({ notes, folders, tags }: Props) {
   useEffect(() => {
     if (dialog?.type === "folder") {
       setFolderNameInput(dialog.folder?.name ?? "");
+      setFolderParentId(dialog.folder?.parent_id ?? selectedFolder ?? null);
+    } else if (dialog?.type === "folder-parent") {
+      setFolderParentId(dialog.folder?.parent_id ?? null);
     } else {
       setFolderNameInput("");
+      setFolderParentId(null);
     }
-  }, [dialog]);
+  }, [dialog, selectedFolder]);
 
   const handleCreate = () => {
     startTransition(async () => {
@@ -182,6 +189,7 @@ export function NotesDashboard({ notes, folders, tags }: Props) {
   };
 
   const handleCreateFolder = () => {
+    setFolderParentId(selectedFolder);
     setDialog({ type: "folder", mode: "create" });
   };
 
@@ -194,6 +202,7 @@ export function NotesDashboard({ notes, folders, tags }: Props) {
   };
 
   const handleChangeFolderParent = (folder: Folder) => {
+    setFolderParentId(folder.parent_id ?? null);
     setDialog({ type: "folder-parent", folder });
   };
 
@@ -326,6 +335,24 @@ export function NotesDashboard({ notes, folders, tags }: Props) {
             <p className="text-sm text-slate-600">
               Create, search, filter by folder, or open a note to continue drawing.
             </p>
+            <div className="flex flex-wrap items-center gap-2 text-xs font-semibold text-slate-600">
+              {breadcrumb.map((crumb, idx) => (
+                <div key={`${crumb.id ?? "root"}-${idx}`} className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setSelectedFolder(crumb.id)}
+                    className={`rounded-full border px-3 py-1 transition ${
+                      crumb.id === selectedFolder
+                        ? "border-amber-300 bg-amber-100 text-amber-800"
+                        : "border-slate-200 bg-white hover:border-slate-300"
+                    }`}
+                  >
+                    {crumb.name}
+                  </button>
+                  {idx < breadcrumb.length - 1 ? <span className="text-slate-400">/</span> : null}
+                </div>
+              ))}
+            </div>
           </div>
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
             <input
@@ -566,10 +593,10 @@ export function NotesDashboard({ notes, folders, tags }: Props) {
                     startTransition(async () => {
                       try {
                         if (dialog.mode === "create") {
-                          await createFolderAction(name);
+                          await createFolderAction(name, folderParentId ?? null);
                           setToast({ type: "success", message: "Folder created" });
                         } else if (dialog.folder) {
-                          await renameFolderAction(dialog.folder.id, name);
+                          await renameFolderAction(dialog.folder.id, name, folderParentId ?? null);
                           setToast({ type: "success", message: "Folder renamed" });
                         }
                         setDialog(null);
@@ -593,6 +620,32 @@ export function NotesDashboard({ notes, folders, tags }: Props) {
                     className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm shadow-sm outline-none ring-2 ring-transparent transition focus:border-amber-300 focus:ring-amber-100"
                     placeholder="Folder name"
                   />
+                  <label className="text-xs font-semibold text-slate-600">
+                    Parent
+                    <select
+                      value={folderParentId ?? ""}
+                      onChange={(e) =>
+                        setFolderParentId(e.target.value === "" ? null : e.target.value)
+                      }
+                      className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm shadow-sm outline-none ring-2 ring-transparent transition focus:border-amber-300 focus:ring-amber-100"
+                    >
+                      <option value="">Top level</option>
+                      {folders
+                        .filter((f) => {
+                          if (!dialog.folder) return true;
+                          if (f.id === dialog.folder.id) return false;
+                          const descendants = new Set(
+                            getDescendantIds(dialog.folder.id, folders),
+                          );
+                          return !descendants.has(f.id);
+                        })
+                        .map((f) => (
+                          <option key={f.id} value={f.id}>
+                            {f.name}
+                          </option>
+                        ))}
+                    </select>
+                  </label>
                   <div className="flex items-center justify-end gap-2">
                     <button
                       type="button"
@@ -647,6 +700,73 @@ export function NotesDashboard({ notes, folders, tags }: Props) {
                       disabled={isPending}
                     >
                     Delete
+                  </button>
+                </div>
+              </>
+            ) : dialog.type === "folder-parent" ? (
+              <>
+                <h3 className="text-lg font-semibold text-slate-900">Move folder</h3>
+                <p className="mt-2 text-sm text-slate-700">
+                  Choose a new parent for <span className="font-semibold">{dialog.folder?.name}</span>. Descendants are excluded.
+                </p>
+                <label className="mt-3 block text-xs font-semibold text-slate-600">
+                  Parent
+                  <select
+                    value={folderParentId ?? ""}
+                    onChange={(e) =>
+                      setFolderParentId(e.target.value === "" ? null : e.target.value)
+                    }
+                    className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm shadow-sm outline-none ring-2 ring-transparent transition focus:border-amber-300 focus:ring-amber-100"
+                  >
+                    <option value="">Top level</option>
+                    {folders
+                      .filter((f) => {
+                        if (!dialog.folder) return true;
+                        if (f.id === dialog.folder.id) return false;
+                        const descendants = new Set(getDescendantIds(dialog.folder.id, folders));
+                        return !descendants.has(f.id);
+                      })
+                      .map((f) => (
+                        <option key={f.id} value={f.id}>
+                          {f.name}
+                        </option>
+                      ))}
+                  </select>
+                </label>
+                <div className="mt-4 flex items-center justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setDialog(null)}
+                    className="rounded-full border border-slate-200 px-3 py-1.5 text-sm font-medium text-slate-700 hover:border-slate-300"
+                    disabled={isPending}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!dialog.folder) return;
+                      startTransition(async () => {
+                        try {
+                          const folderId = dialog.folder?.id;
+                          if (!folderId) return;
+                          await moveFolderParentAction(folderId, folderParentId ?? null);
+                          setToast({ type: "success", message: "Folder moved" });
+                          setDialog(null);
+                          router.refresh();
+                        } catch (err) {
+                          setToast({
+                            type: "error",
+                            message:
+                              err instanceof Error ? err.message : "Unable to move folder",
+                          });
+                        }
+                      });
+                    }}
+                    className="rounded-full bg-amber-600 px-4 py-1.5 text-sm font-semibold text-white shadow-sm transition hover:bg-amber-700 disabled:opacity-60"
+                    disabled={isPending}
+                  >
+                    Save
                   </button>
                 </div>
               </>
@@ -778,4 +898,27 @@ function computeDepth(folder: Folder, folders: Folder[], seen = new Set<string>(
   const parent = folders.find((f) => f.id === folder.parent_id);
   if (!parent) return 0;
   return 1 + computeDepth(parent, folders, seen);
+}
+
+function buildBreadcrumb(selectedFolder: string | null, folders: Folder[]) {
+  if (!selectedFolder) return [{ id: null as string | null, name: "All notes" }];
+  const map = new Map(folders.map((f) => [f.id, f]));
+  const path: { id: string | null; name: string }[] = [{ id: null, name: "All notes" }];
+  let current: Folder | undefined = map.get(selectedFolder);
+  const guard = new Set<string>();
+  while (current && !guard.has(current.id)) {
+    path.push({ id: current.id, name: current.name });
+    guard.add(current.id);
+    current = current.parent_id ? map.get(current.parent_id) : undefined;
+  }
+  return path.reverse();
+}
+
+function getDescendantIds(folderId: string, folders: Folder[]): string[] {
+  const children = folders.filter((f) => f.parent_id === folderId);
+  const ids = children.map((c) => c.id);
+  children.forEach((child) => {
+    ids.push(...getDescendantIds(child.id, folders));
+  });
+  return ids;
 }
