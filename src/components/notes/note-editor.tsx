@@ -11,6 +11,8 @@ import {
   type Editor,
   type TLEditorSnapshot,
   type TLStoreSnapshot,
+  type TLAssetId,
+  type TLShapeId,
 } from "tldraw";
 import type { Json } from "@/lib/database.types";
 import dynamic from "next/dynamic";
@@ -42,6 +44,7 @@ type NoteEditorProps = {
 const AUTOSAVE_DEBOUNCE_MS = 1200;
 const AUTOSAVE_HEARTBEAT_MS = 20000;
 const REVISION_HEARTBEAT_MS = 30000;
+const MAX_ATTACHMENT_SIZE = 10 * 1024 * 1024; // 10MB
 
 type Revision = {
   id: string;
@@ -204,6 +207,9 @@ function EditorShell({
   const [shareExpiry, setShareExpiry] = useState<"never" | "1d" | "7d">("7d");
   const [saveStatus, setSaveStatus] = useState<SaveState>("saved");
   const [isOnline, setIsOnline] = useState(true);
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const localKey = useMemo(() => `note:${noteId}:snapshot`, [noteId]);
   const initialUpdatedAtMs = useMemo(
     () => new Date(initialUpdatedAt).getTime() || 0,
@@ -369,6 +375,75 @@ function EditorShell({
       }
     },
     [noteId, session?.user?.id, supabase],
+  );
+
+  const handleInsertImage = useCallback(
+    async (file: File) => {
+      if (!editorRef.current || !file) return;
+      if (file.size > MAX_ATTACHMENT_SIZE) {
+        setUploadError("File too large (max 10MB).");
+        return;
+      }
+      setIsUploading(true);
+      setUploadError(null);
+      try {
+        const form = new FormData();
+        form.append("file", file);
+        form.append("noteId", noteId);
+        const res = await fetch("/api/attachments", {
+          method: "POST",
+          body: form,
+        });
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          throw new Error(data.error || "Upload failed");
+        }
+        const { attachment } = (await res.json()) as {
+          attachment: { path: string; mime_type: string | null };
+        };
+        const { data: signed } = await supabase.storage
+          .from(bucket)
+          .createSignedUrl(attachment.path, 3600);
+        const url = signed?.signedUrl;
+        if (!url) throw new Error("Could not create signed URL");
+        const editor = editorRef.current;
+        const assetId = (`asset:${crypto.randomUUID()}`) as TLAssetId;
+        const shapeId = (`shape:${crypto.randomUUID()}`) as TLShapeId;
+        editor.createAssets([
+          {
+            id: assetId,
+            type: "image",
+            typeName: "asset",
+            props: {
+              w: 200,
+              h: 200,
+              name: attachment.path,
+              src: url,
+              mimeType: attachment.mime_type || file.type,
+              isAnimated: false,
+            },
+            meta: {},
+          },
+        ]);
+        editor.createShape({
+          id: shapeId,
+          type: "image",
+          x: 0,
+          y: 0,
+          props: {
+            assetId,
+            w: 200,
+            h: 200,
+          },
+        });
+      } catch (err) {
+        console.error(err);
+        setUploadError(err instanceof Error ? err.message : "Upload failed");
+      } finally {
+        setIsUploading(false);
+      }
+    },
+    [bucket, noteId, supabase.storage],
   );
 
   const saveNow = useCallback(async () => {
@@ -575,6 +650,27 @@ function EditorShell({
       <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50 px-4 py-2">
         <div className="text-sm font-semibold text-slate-700">Canvas editor</div>
         <div className="flex items-center gap-2">
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (file) {
+                handleInsertImage(file);
+                e.target.value = "";
+              }
+            }}
+          />
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-800 shadow-sm hover:border-slate-300"
+            disabled={isUploading}
+          >
+            {isUploading ? "Uploading…" : "Upload image"}
+          </button>
           <button
             type="button"
             onClick={handleExport}
@@ -820,6 +916,11 @@ function EditorShell({
           hideUi={false}
         />
       </div>
+      {uploadError ? (
+        <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-700">
+          {uploadError}
+        </div>
+      ) : null}
     </>
   );
 }
