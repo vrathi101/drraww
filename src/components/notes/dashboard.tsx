@@ -30,6 +30,7 @@ type Props = {
 type DialogState =
   | { type: "folder"; mode: "create" | "rename"; folder?: Folder }
   | { type: "delete-folder"; folder: Folder }
+  | { type: "folder-parent"; folder?: Folder }
   | null;
 
 export function NotesDashboard({ notes, folders, tags }: Props) {
@@ -63,9 +64,7 @@ export function NotesDashboard({ notes, folders, tags }: Props) {
     if (selectedTags.length > 0) {
       next = next.filter((n) => {
         const noteTagIds =
-          (n as Note & { note_tags?: { tag_id: string }[] }).note_tags?.map(
-            (t) => t.tag_id,
-          ) ?? [];
+          (n as Note & { note_tags?: { tag_id: string }[] }).note_tags?.map((t) => t.tag_id) ?? [];
         return selectedTags.every((tagId) => noteTagIds.includes(tagId));
       });
     }
@@ -191,7 +190,11 @@ export function NotesDashboard({ notes, folders, tags }: Props) {
   };
 
   const handleDeleteFolder = (folder: Folder) => {
-      setDialog({ type: "delete-folder", folder });
+    setDialog({ type: "delete-folder", folder });
+  };
+
+  const handleChangeFolderParent = (folder: Folder) => {
+    setDialog({ type: "folder-parent", folder });
   };
 
   const handleMoveNote = (noteId: string, folderId: string | null) => {
@@ -259,42 +262,55 @@ export function NotesDashboard({ notes, folders, tags }: Props) {
             <span>All notes</span>
             <span className="text-xs text-slate-500">{notes.length}</span>
           </button>
-          {folders.map((folder) => (
-            <div
-              key={folder.id}
-              className={`flex items-center justify-between rounded-xl px-3 py-2 text-sm transition ${
-                selectedFolder === folder.id
-                  ? "bg-amber-100 text-amber-800"
-                  : "text-slate-700 hover:bg-slate-100"
-              }`}
-            >
-              <button
-                type="button"
-                className="flex-1 text-left font-semibold"
-                onClick={() => setSelectedFolder(folder.id)}
+          {folders.map((folder) => {
+            const depth = computeDepth(folder, folders);
+            return (
+              <div
+                key={folder.id}
+                className={`flex items-center justify-between rounded-xl px-3 py-2 text-sm transition ${
+                  selectedFolder === folder.id
+                    ? "bg-amber-100 text-amber-800"
+                    : "text-slate-700 hover:bg-slate-100"
+                }`}
+                style={{ paddingLeft: `${12 + depth * 12}px` }}
               >
-                {folder.name}
-              </button>
-              <div className="flex items-center gap-1 text-xs">
                 <button
                   type="button"
-                  onClick={() => handleRenameFolder(folder)}
-                  className="rounded px-1 text-slate-500 hover:bg-slate-200"
-                  disabled={isPending}
+                  className="flex-1 text-left font-semibold"
+                  onClick={() => setSelectedFolder(folder.id)}
                 >
-                  ✎
+                  {folder.name}
                 </button>
-                <button
-                  type="button"
-                  onClick={() => handleDeleteFolder(folder)}
-                  className="rounded px-1 text-rose-500 hover:bg-rose-100"
-                  disabled={isPending}
-                >
-                  🗑
-                </button>
+                <div className="flex items-center gap-1 text-xs">
+                  <button
+                    type="button"
+                    onClick={() => handleChangeFolderParent(folder)}
+                    className="rounded px-1 text-slate-500 hover:bg-slate-200"
+                    disabled={isPending}
+                    title="Move folder"
+                  >
+                    ⇄
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleRenameFolder(folder)}
+                    className="rounded px-1 text-slate-500 hover:bg-slate-200"
+                    disabled={isPending}
+                  >
+                    ✎
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleDeleteFolder(folder)}
+                    className="rounded px-1 text-rose-500 hover:bg-rose-100"
+                    disabled={isPending}
+                  >
+                    🗑
+                  </button>
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </aside>
 
@@ -753,4 +769,13 @@ function formatUpdatedAt(timestamp: string) {
     month: "short",
     day: "numeric",
   });
+}
+
+function computeDepth(folder: Folder, folders: Folder[], seen = new Set<string>()): number {
+  if (!folder.parent_id) return 0;
+  if (seen.has(folder.id)) return 0;
+  seen.add(folder.id);
+  const parent = folders.find((f) => f.id === folder.parent_id);
+  if (!parent) return 0;
+  return 1 + computeDepth(parent, folders, seen);
 }

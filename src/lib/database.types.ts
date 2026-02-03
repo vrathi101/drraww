@@ -118,6 +118,7 @@ export interface Database {
           created_at: string;
           id: string;
           name: string;
+          parent_id: string | null;
           owner_id: string;
           updated_at: string;
         };
@@ -125,6 +126,7 @@ export interface Database {
           created_at?: string;
           id?: string;
           name: string;
+          parent_id?: string | null;
           owner_id: string;
           updated_at?: string;
         };
@@ -132,6 +134,7 @@ export interface Database {
           created_at?: string;
           id?: string;
           name?: string;
+          parent_id?: string | null;
           owner_id?: string;
           updated_at?: string;
         };
@@ -140,6 +143,12 @@ export interface Database {
             foreignKeyName: "folders_owner_id_fkey";
             columns: ["owner_id"];
             referencedRelation: "users";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "folders_parent_id_fkey";
+            columns: ["parent_id"];
+            referencedRelation: "folders";
             referencedColumns: ["id"];
           },
         ];

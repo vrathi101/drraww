@@ -34,8 +34,8 @@ export async function deleteNoteAction(noteId: string) {
   revalidatePath("/app");
 }
 
-export async function createFolderAction(name: string) {
-  const id = await createFolder(name);
+export async function createFolderAction(name: string, parentId: string | null = null) {
+  const id = await createFolder(name, parentId);
   revalidatePath("/app");
   return { id };
 }

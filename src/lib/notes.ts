@@ -126,7 +126,7 @@ export async function listFolders(): Promise<Folder[]> {
   return (data as Folder[] | null) ?? [];
 }
 
-export async function createFolder(name: string): Promise<string> {
+export async function createFolder(name: string, parentId: string | null = null): Promise<string> {
   const { supabase, user } = await getUserIdOrRedirect();
 
   const trimmed = name.trim() || "Untitled";
@@ -135,6 +135,7 @@ export async function createFolder(name: string): Promise<string> {
     .insert({
       owner_id: user.id,
       name: trimmed,
+      parent_id: parentId,
     })
     .select("id")
     .single();
@@ -161,6 +162,14 @@ export async function renameFolder(folderId: string, name: string) {
 
 export async function deleteFolder(folderId: string) {
   const { supabase, user } = await getUserIdOrRedirect();
+
+  // Move child folders up one level
+  const { error: childMoveError } = await supabase
+    .from("folders")
+    .update({ parent_id: null })
+    .eq("parent_id", folderId)
+    .eq("owner_id", user.id);
+  if (childMoveError) throw new Error(`Failed to detach child folders: ${childMoveError.message}`);
 
   const { error: clearError } = await supabase
     .from("notes")
