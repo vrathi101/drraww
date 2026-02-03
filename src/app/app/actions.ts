@@ -1,7 +1,15 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { createNote, deleteNote, renameNote } from "@/lib/notes";
+import {
+  createFolder,
+  createNote,
+  deleteFolder,
+  deleteNote,
+  moveNoteToFolder,
+  renameFolder,
+  renameNote,
+} from "@/lib/notes";
 
 export async function createNoteAction() {
   const noteId = await createNote();
@@ -20,5 +28,26 @@ export async function renameNoteAction(noteId: string, title: string) {
 
 export async function deleteNoteAction(noteId: string) {
   await deleteNote(noteId);
+  revalidatePath("/app");
+}
+
+export async function createFolderAction(name: string) {
+  const id = await createFolder(name);
+  revalidatePath("/app");
+  return { id };
+}
+
+export async function renameFolderAction(folderId: string, name: string) {
+  await renameFolder(folderId, name);
+  revalidatePath("/app");
+}
+
+export async function deleteFolderAction(folderId: string) {
+  await deleteFolder(folderId);
+  revalidatePath("/app");
+}
+
+export async function moveNoteToFolderAction(noteId: string, folderId: string | null) {
+  await moveNoteToFolder(noteId, folderId);
   revalidatePath("/app");
 }

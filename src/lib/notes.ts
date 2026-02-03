@@ -3,6 +3,7 @@ import { createSupabaseServerClient } from "./supabase/server";
 import { Database } from "./database.types";
 
 export type Note = Database["public"]["Tables"]["notes"]["Row"];
+export type Folder = Database["public"]["Tables"]["folders"]["Row"];
 
 async function getUserIdOrRedirect() {
   const supabase = createSupabaseServerClient();
@@ -17,7 +18,7 @@ async function getUserIdOrRedirect() {
   return { supabase, user };
 }
 
-export async function listNotes(): Promise<Note[]> {
+export async function listNotes(folderId?: string): Promise<Note[]> {
   const { supabase, user } = await getUserIdOrRedirect();
 
   const { data, error } = await supabase
@@ -25,6 +26,7 @@ export async function listNotes(): Promise<Note[]> {
     .select("*")
     .eq("owner_id", user.id)
     .eq("is_deleted", false)
+    .match(folderId ? { folder_id: folderId } : {})
     .order("updated_at", { ascending: false });
 
   if (error) {
@@ -99,4 +101,88 @@ export async function getNote(noteId: string): Promise<Note> {
   }
 
   return data as Note;
+}
+
+export async function listFolders(): Promise<Folder[]> {
+  const { supabase, user } = await getUserIdOrRedirect();
+
+  const { data, error } = await supabase
+    .from("folders")
+    .select("*")
+    .eq("owner_id", user.id)
+    .order("updated_at", { ascending: false });
+
+  if (error) {
+    throw new Error(`Failed to load folders: ${error.message}`);
+  }
+
+  return (data as Folder[] | null) ?? [];
+}
+
+export async function createFolder(name: string): Promise<string> {
+  const { supabase, user } = await getUserIdOrRedirect();
+
+  const trimmed = name.trim() || "Untitled";
+  const { data, error } = await supabase
+    .from("folders")
+    .insert({
+      owner_id: user.id,
+      name: trimmed,
+    })
+    .select("id")
+    .single();
+
+  if (error || !data) {
+    throw new Error(`Failed to create folder: ${error?.message}`);
+  }
+  return data.id;
+}
+
+export async function renameFolder(folderId: string, name: string) {
+  const { supabase, user } = await getUserIdOrRedirect();
+  const trimmed = name.trim();
+  if (!trimmed) {
+    throw new Error("Name cannot be empty");
+  }
+  const { error } = await supabase
+    .from("folders")
+    .update({ name: trimmed })
+    .eq("id", folderId)
+    .eq("owner_id", user.id);
+  if (error) throw new Error(`Failed to rename folder: ${error.message}`);
+}
+
+export async function deleteFolder(folderId: string) {
+  const { supabase, user } = await getUserIdOrRedirect();
+
+  const { error: clearError } = await supabase
+    .from("notes")
+    .update({ folder_id: null })
+    .eq("folder_id", folderId)
+    .eq("owner_id", user.id);
+  if (clearError) throw new Error(`Failed to detach notes: ${clearError.message}`);
+
+  const { error } = await supabase
+    .from("folders")
+    .delete()
+    .eq("id", folderId)
+    .eq("owner_id", user.id);
+
+  if (error) {
+    throw new Error(`Failed to delete folder: ${error.message}`);
+  }
+}
+
+export async function moveNoteToFolder(noteId: string, folderId: string | null) {
+  const { supabase, user } = await getUserIdOrRedirect();
+
+  const { error } = await supabase
+    .from("notes")
+    .update({ folder_id: folderId })
+    .eq("id", noteId)
+    .eq("owner_id", user.id);
+
+  if (error) {
+    throw new Error(`Failed to move note: ${error.message}`);
+  }
 }
