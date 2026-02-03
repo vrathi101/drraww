@@ -15,8 +15,10 @@ export interface Database {
           doc: Json;
           id: string;
           is_deleted: boolean;
+          is_pinned: boolean;
           owner_id: string;
           folder_id: string | null;
+          pinned_at: string | null;
           thumbnail_path: string | null;
           title: string;
           updated_at: string;
@@ -26,8 +28,10 @@ export interface Database {
           doc?: Json;
           id?: string;
           is_deleted?: boolean;
+          is_pinned?: boolean;
           owner_id: string;
           folder_id?: string | null;
+          pinned_at?: string | null;
           thumbnail_path?: string | null;
           title?: string;
           updated_at?: string;
@@ -37,8 +41,10 @@ export interface Database {
           doc?: Json;
           id?: string;
           is_deleted?: boolean;
+          is_pinned?: boolean;
           owner_id?: string;
           folder_id?: string | null;
+          pinned_at?: string | null;
           thumbnail_path?: string | null;
           title?: string;
           updated_at?: string;

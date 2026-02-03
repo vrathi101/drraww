@@ -9,6 +9,7 @@ import {
   moveNoteToFolder,
   renameFolder,
   renameNote,
+  togglePinNote,
 } from "@/lib/notes";
 
 export async function createNoteAction() {
@@ -49,5 +50,10 @@ export async function deleteFolderAction(folderId: string) {
 
 export async function moveNoteToFolderAction(noteId: string, folderId: string | null) {
   await moveNoteToFolder(noteId, folderId);
+  revalidatePath("/app");
+}
+
+export async function togglePinNoteAction(noteId: string, pin: boolean) {
+  await togglePinNote(noteId, pin);
   revalidatePath("/app");
 }

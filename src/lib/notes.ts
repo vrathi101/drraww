@@ -27,6 +27,8 @@ export async function listNotes(folderId?: string): Promise<Note[]> {
     .eq("owner_id", user.id)
     .eq("is_deleted", false)
     .match(folderId ? { folder_id: folderId } : {})
+    .order("is_pinned", { ascending: false })
+    .order("pinned_at", { ascending: false, nullsLast: true })
     .order("updated_at", { ascending: false });
 
   if (error) {
@@ -185,4 +187,17 @@ export async function moveNoteToFolder(noteId: string, folderId: string | null) 
   if (error) {
     throw new Error(`Failed to move note: ${error.message}`);
   }
+}
+
+export async function togglePinNote(noteId: string, pin: boolean) {
+  const { supabase, user } = await getUserIdOrRedirect();
+  const { error } = await supabase
+    .from("notes")
+    .update({
+      is_pinned: pin,
+      pinned_at: pin ? new Date().toISOString() : null,
+    })
+    .eq("id", noteId)
+    .eq("owner_id", user.id);
+  if (error) throw new Error(`Failed to update pin: ${error.message}`);
 }

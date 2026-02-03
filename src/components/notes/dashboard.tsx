@@ -8,6 +8,7 @@ import {
   moveNoteToFolderAction,
   renameNoteAction,
   renameFolderAction,
+  togglePinNoteAction,
 } from "@/app/app/actions";
 import { useSupabase } from "@/components/supabase-provider";
 import type { Folder, Note } from "@/lib/notes";
@@ -279,41 +280,44 @@ export function NotesDashboard({ notes, folders }: Props) {
                   </div>
                 </Link>
                 <div className="flex flex-1 flex-col gap-3 px-4 py-3">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="space-y-1">
-                      <h2 className="line-clamp-1 text-lg font-semibold text-slate-900">
-                        {note.title || "Untitled"}
-                      </h2>
-                      <p className="text-xs text-slate-500">
-                        Updated {formatUpdatedAt(note.updated_at)}
-                      </p>
-                      <div className="text-xs text-slate-600">
-                        Folder:{" "}
-                        <select
-                          className="rounded border border-slate-200 bg-white px-2 py-1 text-xs"
-                          value={note.folder_id ?? ""}
-                          onChange={(e) =>
-                            handleMoveNote(
-                              note.id,
-                              e.target.value === "" ? null : e.target.value,
-                            )
-                          }
-                          disabled={isPending}
-                        >
-                          <option value="">Unfiled</option>
-                          {folders.map((f) => (
-                            <option key={f.id} value={f.id}>
-                              {f.name}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
+                <div className="flex items-start justify-between gap-3">
+                  <div className="space-y-1">
+                    <h2 className="line-clamp-1 text-lg font-semibold text-slate-900">
+                      {note.title || "Untitled"}
+                    </h2>
+                    <p className="text-xs text-slate-500">
+                      Updated {formatUpdatedAt(note.updated_at)}
+                    </p>
+                    <div className="text-xs text-slate-600">
+                      Folder:{" "}
+                      <select
+                        className="rounded border border-slate-200 bg-white px-2 py-1 text-xs"
+                        value={note.folder_id ?? ""}
+                        onChange={(e) =>
+                          handleMoveNote(
+                            note.id,
+                            e.target.value === "" ? null : e.target.value,
+                          )
+                        }
+                        disabled={isPending}
+                      >
+                        <option value="">Unfiled</option>
+                        {folders.map((f) => (
+                          <option key={f.id} value={f.id}>
+                            {f.name}
+                          </option>
+                        ))}
+                      </select>
                     </div>
-                    <div className="flex items-center gap-2 opacity-0 transition group-hover:opacity-100">
-                      <button
-                        type="button"
-                        onClick={() => handleRename(note)}
-                        className="rounded-full border border-slate-200 px-3 py-1 text-xs font-medium text-slate-700 hover:border-slate-400"
+                    <div className="text-xs text-amber-700 font-semibold">
+                      {note.is_pinned ? "Pinned" : ""}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 opacity-0 transition group-hover:opacity-100">
+                    <button
+                      type="button"
+                      onClick={() => handleRename(note)}
+                      className="rounded-full border border-slate-200 px-3 py-1 text-xs font-medium text-slate-700 hover:border-slate-400"
                         disabled={isPending}
                       >
                         Rename
@@ -323,11 +327,28 @@ export function NotesDashboard({ notes, folders }: Props) {
                         onClick={() => handleDelete(note)}
                         className="rounded-full border border-rose-200 px-3 py-1 text-xs font-semibold text-rose-700 hover:border-rose-400"
                         disabled={isPending}
-                      >
-                        Delete
-                      </button>
-                    </div>
+                    >
+                      Delete
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        startTransition(async () => {
+                          await togglePinNoteAction(note.id, !note.is_pinned);
+                          setToast({
+                            type: "success",
+                            message: note.is_pinned ? "Unpinned" : "Pinned",
+                          });
+                          router.refresh();
+                        });
+                      }}
+                      className="rounded-full border border-amber-200 px-3 py-1 text-xs font-semibold text-amber-700 hover:border-amber-400"
+                      disabled={isPending}
+                    >
+                      {note.is_pinned ? "Unpin" : "Pin"}
+                    </button>
                   </div>
+                </div>
                   <div className="mt-auto flex items-center justify-between gap-3">
                     <Link
                       href={`/app/note/${note.id}`}
