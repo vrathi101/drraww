@@ -10,7 +10,11 @@ import {
   renameFolderAction,
   togglePinNoteAction,
   archiveNoteAction,
+  updateNoteTagsAction,
 } from "@/app/app/actions";
+import {
+  createTagAction,
+} from "@/app/app/tags/action";
 import { useSupabase } from "@/components/supabase-provider";
 import type { Folder, Note } from "@/lib/notes";
 import Link from "next/link";
@@ -38,9 +42,16 @@ export function NotesDashboard({ notes, folders, tags }: Props) {
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [dialog, setDialog] = useState<DialogState>(null);
   const [folderNameInput, setFolderNameInput] = useState("");
+  const [tagList, setTagList] = useState(tags);
   const [toast, setToast] = useState<{ type: "error" | "success"; message: string } | null>(
     null,
   );
+  const [tagDialog, setTagDialog] = useState<{
+    noteId: string;
+    title: string;
+    selected: string[];
+  } | null>(null);
+  const [newTagName, setNewTagName] = useState("");
 
   const filtered = useMemo(() => {
     const term = search.trim().toLowerCase();
@@ -164,6 +175,36 @@ export function NotesDashboard({ notes, folders, tags }: Props) {
       await moveNoteToFolderAction(noteId, folderId);
       setToast({ type: "success", message: "Note moved" });
       router.refresh();
+    });
+  };
+
+  const handleSaveTags = (noteId: string, selected: string[]) => {
+    startTransition(async () => {
+      await updateNoteTagsAction(noteId, selected);
+      setToast({ type: "success", message: "Tags updated" });
+      setTagDialog(null);
+      router.refresh();
+    });
+  };
+
+  const handleCreateTag = () => {
+    const name = newTagName.trim();
+    if (!name) {
+      setToast({ type: "error", message: "Tag name cannot be empty" });
+      return;
+    }
+    startTransition(async () => {
+      try {
+        const { id } = await createTagAction(name);
+        setTagList((prev) => [...prev, { id, name, color: null }]);
+        setNewTagName("");
+      } catch (err) {
+        setToast({
+          type: "error",
+          message:
+            err instanceof Error ? err.message : "Could not create tag. It may already exist.",
+        });
+      }
     });
   };
 
@@ -366,9 +407,9 @@ export function NotesDashboard({ notes, folders, tags }: Props) {
                       </select>
                     </div>
                     <div className="text-xs text-amber-700 font-semibold">
-                      {note.is_pinned ? "Pinned" : ""}
-                    </div>
+                    {note.is_pinned ? "Pinned" : ""}
                   </div>
+                </div>
                     <div className="flex items-center gap-2 opacity-0 transition group-hover:opacity-100">
                       <button
                         type="button"
@@ -384,21 +425,39 @@ export function NotesDashboard({ notes, folders, tags }: Props) {
                         className="rounded-full border border-rose-200 px-3 py-1 text-xs font-semibold text-rose-700 hover:border-rose-400"
                         disabled={isPending}
                     >
-                        Delete
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleArchive(note)}
-                        className="rounded-full border border-slate-200 px-3 py-1 text-xs font-medium text-slate-700 hover:border-slate-400"
-                        disabled={isPending}
-                      >
-                        Archive
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          startTransition(async () => {
-                            await togglePinNoteAction(note.id, !note.is_pinned);
+                      Delete
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleArchive(note)}
+                      className="rounded-full border border-slate-200 px-3 py-1 text-xs font-medium text-slate-700 hover:border-slate-400"
+                      disabled={isPending}
+                    >
+                      Archive
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const selected =
+                          (note as Note & { note_tags?: { tag_id: string }[] }).note_tags?.map(
+                            (t) => t.tag_id,
+                          ) ?? [];
+                        setTagDialog({
+                          noteId: note.id,
+                          title: note.title || "Untitled",
+                          selected,
+                        });
+                      }}
+                      className="rounded-full border border-slate-200 px-3 py-1 text-xs font-medium text-slate-700 hover:border-slate-400"
+                      disabled={isPending}
+                    >
+                      Tags
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        startTransition(async () => {
+                          await togglePinNoteAction(note.id, !note.is_pinned);
                           setToast({
                             type: "success",
                             message: note.is_pinned ? "Unpinned" : "Pinned",
@@ -413,22 +472,22 @@ export function NotesDashboard({ notes, folders, tags }: Props) {
                     </button>
                   </div>
                 </div>
-                  <div className="mt-auto flex items-center justify-between gap-3">
-                    <Link
-                      href={`/app/note/${note.id}`}
-                      className="inline-flex items-center gap-2 text-sm font-semibold text-amber-700 hover:text-amber-800"
+                <div className="mt-auto flex items-center justify-between gap-3">
+                  <Link
+                    href={`/app/note/${note.id}`}
+                    className="inline-flex items-center gap-2 text-sm font-semibold text-amber-700 hover:text-amber-800"
                   >
                     Open note →
                   </Link>
                   {isPending ? (
                     <span className="text-xs text-slate-500">Working...</span>
-                    ) : null}
-                  </div>
+                  ) : null}
                 </div>
-              </article>
-            ))}
-          </div>
-        )}
+              </div>
+            </article>
+          ))}
+        </div>
+      )}
       </div>
       {dialog ? (
         <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40 px-4">
@@ -540,6 +599,80 @@ export function NotesDashboard({ notes, folders, tags }: Props) {
                 </div>
               </>
             ) : null}
+          </div>
+        </div>
+      ) : null}
+      {tagDialog ? (
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40 px-4">
+          <div className="w-full max-w-md rounded-2xl bg-white p-5 shadow-2xl">
+            <h3 className="text-lg font-semibold text-slate-900">Tags for {tagDialog.title}</h3>
+            <p className="text-sm text-slate-600">Select tags to attach to this note.</p>
+            <div className="mt-4 flex flex-wrap gap-2">
+              {tagList.map((tag) => {
+                const active = tagDialog.selected.includes(tag.id);
+                return (
+                  <button
+                    key={tag.id}
+                    type="button"
+                    onClick={() => {
+                      setTagDialog((prev) =>
+                        prev
+                          ? {
+                              ...prev,
+                              selected: prev.selected.includes(tag.id)
+                                ? prev.selected.filter((id) => id !== tag.id)
+                                : [...prev.selected, tag.id],
+                            }
+                          : prev,
+                      );
+                    }}
+                    className={`rounded-full border px-3 py-1 text-xs font-semibold transition ${
+                      active
+                        ? "border-amber-300 bg-amber-100 text-amber-800"
+                        : "border-slate-200 bg-white text-slate-700 hover:border-slate-300"
+                    }`}
+                    style={tag.color ? { borderColor: tag.color, color: tag.color } : undefined}
+                  >
+                    {tag.name}
+                  </button>
+                );
+              })}
+            </div>
+            <div className="mt-4 flex items-center gap-2">
+              <input
+                type="text"
+                value={newTagName}
+                onChange={(e) => setNewTagName(e.target.value)}
+                className="flex-1 rounded-xl border border-slate-200 px-3 py-2 text-sm shadow-sm outline-none ring-2 ring-transparent transition focus:border-amber-300 focus:ring-amber-100"
+                placeholder="New tag name"
+              />
+              <button
+                type="button"
+                onClick={handleCreateTag}
+                className="rounded-full bg-amber-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-amber-700 disabled:opacity-60"
+                disabled={isPending}
+              >
+                Add tag
+              </button>
+            </div>
+            <div className="mt-4 flex items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setTagDialog(null)}
+                className="rounded-full border border-slate-200 px-3 py-1.5 text-sm font-medium text-slate-700 hover:border-slate-300"
+                disabled={isPending}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => handleSaveTags(tagDialog.noteId, tagDialog.selected)}
+                className="rounded-full bg-emerald-600 px-4 py-1.5 text-sm font-semibold text-white shadow-sm hover:bg-emerald-700 disabled:opacity-60"
+                disabled={isPending}
+              >
+                Save
+              </button>
+            </div>
           </div>
         </div>
       ) : null}

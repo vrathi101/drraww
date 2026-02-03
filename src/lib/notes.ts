@@ -257,3 +257,19 @@ export async function getArchivedNotes(): Promise<Note[]> {
   }
   return (data as Note[] | null) ?? [];
 }
+
+export async function updateNoteTags(noteId: string, tagIds: string[]) {
+  const { supabase } = await getUserIdOrRedirect();
+
+  const { error: deleteError } = await supabase
+    .from("note_tags")
+    .delete()
+    .eq("note_id", noteId);
+  if (deleteError) throw new Error(`Failed to clear tags: ${deleteError.message}`);
+
+  if (tagIds.length === 0) return;
+
+  const inserts = tagIds.map((tagId) => ({ note_id: noteId, tag_id: tagId }));
+  const { error: insertError } = await supabase.from("note_tags").insert(inserts);
+  if (insertError) throw new Error(`Failed to set tags: ${insertError.message}`);
+}

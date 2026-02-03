@@ -11,6 +11,7 @@ import {
   renameNote,
   togglePinNote,
   archiveNote,
+  updateNoteTags,
 } from "@/lib/notes";
 
 export async function createNoteAction() {
@@ -61,5 +62,10 @@ export async function togglePinNoteAction(noteId: string, pin: boolean) {
 
 export async function archiveNoteAction(noteId: string) {
   await archiveNote(noteId);
+  revalidatePath("/app");
+}
+
+export async function updateNoteTagsAction(noteId: string, tagIds: string[]) {
+  await updateNoteTags(noteId, tagIds);
   revalidatePath("/app");
 }
