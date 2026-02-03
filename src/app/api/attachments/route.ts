@@ -19,6 +19,13 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Missing file or noteId" }, { status: 400 });
   }
 
+  if (file.size > 10 * 1024 * 1024) {
+    return NextResponse.json({ error: "File too large (max 10MB)" }, { status: 400 });
+  }
+  if (!file.type || !file.type.startsWith("image/")) {
+    return NextResponse.json({ error: "Only image uploads are supported" }, { status: 400 });
+  }
+
   const { data: noteRow, error: noteError } = await supabase
     .from("notes")
     .select("id")
