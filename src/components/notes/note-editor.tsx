@@ -5,6 +5,7 @@ import {
   listSharesAction,
   createShareAction,
   revokeShareAction,
+  updateSharePasswordAction,
 } from "@/app/app/actions";
 import { useSupabase } from "@/components/supabase-provider";
 import {
@@ -851,17 +852,12 @@ function EditorShell({
                 <button
                   type="button"
                   onClick={async () => {
-                    if (!bulkPassword.trim()) return;
+                    const trimmed = bulkPassword.trim();
+                    if (!trimmed) return;
                     const updated = await Promise.all(
                       shareLinks.map(async (link) => {
-                        await revokeShareAction(link.id);
-                        const { link: newLink } = await createShareAction(
-                          noteId,
-                          link.allow_edit,
-                          link.expires_at,
-                          bulkPassword,
-                        );
-                        return newLink;
+                        const { share } = await updateSharePasswordAction(link.id, trimmed);
+                        return { ...link, password_hash: share.password_hash };
                       }),
                     );
                     setShareLinks(updated);
@@ -875,11 +871,12 @@ function EditorShell({
                 type="button"
                 onClick={async () => {
                   try {
+                    const password = sharePassword.trim();
                     const { link } = await createShareAction(
                       noteId,
                       false,
                       resolveExpiry(shareExpiry),
-                      sharePassword || null,
+                      password || null,
                     );
                     setShareLinks((prev) => [link, ...prev]);
                   } catch (err) {
@@ -894,11 +891,12 @@ function EditorShell({
                 type="button"
                 onClick={async () => {
                   try {
+                    const password = sharePassword.trim();
                     const { link } = await createShareAction(
                       noteId,
                       true,
                       resolveExpiry(shareExpiry),
-                      sharePassword || null,
+                      password || null,
                     );
                     setShareLinks((prev) => [link, ...prev]);
                   } catch (err) {

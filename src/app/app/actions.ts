@@ -17,6 +17,7 @@ import {
   listShares,
   createShare,
   revokeShare,
+  updateSharePassword,
 } from "@/lib/notes";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
@@ -99,6 +100,17 @@ export async function createShareAction(
 
 export async function revokeShareAction(shareId: string) {
   await revokeShare(shareId);
+}
+
+export async function updateSharePasswordAction(shareId: string, password?: string | null) {
+  const trimmed = password?.trim() ?? "";
+  const passwordHash = trimmed
+    ? createHash("sha256")
+        .update(trimmed)
+        .digest("hex")
+    : null;
+  const share = await updateSharePassword(shareId, passwordHash);
+  return { share };
 }
 
 export async function searchNotesAction(query: string) {

@@ -382,6 +382,20 @@ export async function revokeShare(id: string) {
   if (error) throw new Error(`Failed to revoke share: ${error.message}`);
 }
 
+export async function updateSharePassword(shareId: string, passwordHash: string | null) {
+  const { supabase, user } = await getUserIdOrRedirect();
+  const { data, error } = await supabase
+    .from("note_shares")
+    .update({ password_hash: passwordHash })
+    .eq("id", shareId)
+    .eq("owner_id", user.id)
+    .select("*")
+    .maybeSingle();
+
+  if (error || !data) throw new Error(`Failed to update share: ${error?.message}`);
+  return data as NoteShare;
+}
+
 function isDescendant(
   folders: { id: string; parent_id: string | null }[],
   candidateParent: string,
