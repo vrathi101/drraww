@@ -60,6 +60,7 @@ export function NotesDashboard({ notes, folders, tags }: Props) {
   const [folderParentId, setFolderParentId] = useState<string | null>(null);
   const [collapsedFolders, setCollapsedFolders] = useState<Set<string>>(new Set());
   const [tagList, setTagList] = useState(tags);
+  const [dragOverFolder, setDragOverFolder] = useState<string | "root" | null>(null);
   const [sort, setSort] = useState<"updated" | "created" | "title" | "last_opened">("updated");
   const [toast, setToast] = useState<{ type: "error" | "success"; message: string } | null>(
     null,
@@ -303,6 +304,7 @@ export function NotesDashboard({ notes, folders, tags }: Props) {
 
   const handleDropOnFolder = (folder: Folder | null, e: React.DragEvent) => {
     e.preventDefault();
+    setDragOverFolder(null);
     const noteId = e.dataTransfer.getData("text/note-id");
     const folderId = e.dataTransfer.getData("text/folder-id");
     if (noteId) {
@@ -327,12 +329,21 @@ export function NotesDashboard({ notes, folders, tags }: Props) {
     return children.map((folder) => {
       const isCollapsed = collapsedFolders.has(folder.id);
       const childNodes = renderFolderTree(folder.id, depth + 1);
+      const isDrop = dragOverFolder === folder.id;
       return (
         <div
           key={folder.id}
           className={`flex flex-col rounded-xl ${selectedFolder === folder.id ? "bg-amber-50" : ""}`}
           onDragOver={(e) => e.preventDefault()}
           onDrop={(e) => handleDropOnFolder(folder, e)}
+          onDragEnter={(e) => {
+            e.preventDefault();
+            setDragOverFolder(folder.id);
+          }}
+          onDragLeave={(e) => {
+            e.preventDefault();
+            setDragOverFolder((prev) => (prev === folder.id ? null : prev));
+          }}
         >
           <div
             className={`flex items-center justify-between rounded-xl px-3 py-2 text-sm transition ${
@@ -343,6 +354,8 @@ export function NotesDashboard({ notes, folders, tags }: Props) {
             style={{ paddingLeft: `${12 + depth * 12}px` }}
             draggable
             onDragStart={(e) => e.dataTransfer.setData("text/folder-id", folder.id)}
+            onDragEnd={() => setDragOverFolder(null)}
+            data-drop-target={isDrop ? "true" : undefined}
           >
             <div className="flex items-center gap-2">
               <button
@@ -441,7 +454,11 @@ export function NotesDashboard({ notes, folders, tags }: Props) {
       key={note.id}
       className="group flex h-full flex-col justify-between overflow-hidden rounded-2xl border border-slate-200 bg-white/90 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
       draggable
-      onDragStart={(e) => e.dataTransfer.setData("text/note-id", note.id)}
+      onDragStart={(e) => {
+        e.dataTransfer.setData("text/note-id", note.id);
+        e.dataTransfer.effectAllowed = "move";
+      }}
+      onDragEnd={() => setDragOverFolder(null)}
     >
       <Link href={`/app/note/${note.id}`} className="block">
         <div className="relative aspect-[4/3] w-full overflow-hidden bg-slate-100">
@@ -601,9 +618,17 @@ export function NotesDashboard({ notes, folders, tags }: Props) {
               selectedFolder === null
                 ? "bg-amber-100 text-amber-800"
                 : "text-slate-700 hover:bg-slate-100"
-            }`}
+            } ${dragOverFolder === "root" ? "border border-amber-300 bg-amber-50" : ""}`}
             onDragOver={(e) => e.preventDefault()}
             onDrop={(e) => handleDropOnFolder(null, e)}
+            onDragEnter={(e) => {
+              e.preventDefault();
+              setDragOverFolder("root");
+            }}
+            onDragLeave={(e) => {
+              e.preventDefault();
+              setDragOverFolder((prev) => (prev === "root" ? null : prev));
+            }}
           >
             <button type="button" onClick={() => setSelectedFolder(null)} className="flex-1 text-left">
               All notes
