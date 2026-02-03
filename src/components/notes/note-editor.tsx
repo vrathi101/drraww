@@ -206,6 +206,7 @@ function EditorShell({
   const [shareLoading, setShareLoading] = useState(false);
   const [shareExpiry, setShareExpiry] = useState<"never" | "1d" | "7d">("7d");
   const [sharePassword, setSharePassword] = useState("");
+  const [bulkPassword, setBulkPassword] = useState("");
   const [saveStatus, setSaveStatus] = useState<SaveState>("saved");
   const [isOnline, setIsOnline] = useState(true);
   const [isUploading, setIsUploading] = useState(false);
@@ -837,6 +838,38 @@ function EditorShell({
                   className="flex-1 rounded-lg border border-slate-200 px-3 py-1 text-xs outline-none"
                   placeholder="Set a password"
                 />
+              </div>
+              <div className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2">
+                <span className="text-xs font-semibold text-slate-700">Enforce on existing</span>
+                <input
+                  type="password"
+                  value={bulkPassword}
+                  onChange={(e) => setBulkPassword(e.target.value)}
+                  className="flex-1 rounded-lg border border-slate-200 px-3 py-1 text-xs outline-none"
+                  placeholder="Set password for all links"
+                />
+                <button
+                  type="button"
+                  onClick={async () => {
+                    if (!bulkPassword.trim()) return;
+                    const updated = await Promise.all(
+                      shareLinks.map(async (link) => {
+                        await revokeShareAction(link.id);
+                        const { link: newLink } = await createShareAction(
+                          noteId,
+                          link.allow_edit,
+                          link.expires_at,
+                          bulkPassword,
+                        );
+                        return newLink;
+                      }),
+                    );
+                    setShareLinks(updated);
+                  }}
+                  className="rounded-full bg-amber-600 px-3 py-1 text-xs font-semibold text-white shadow-sm hover:bg-amber-700"
+                >
+                  Apply to all
+                </button>
               </div>
               <button
                 type="button"
