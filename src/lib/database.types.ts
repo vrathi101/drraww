@@ -20,6 +20,7 @@ export interface Database {
           owner_id: string;
           folder_id: string | null;
           deleted_at: string | null;
+          last_opened_at: string | null;
           pinned_at: string | null;
           thumbnail_path: string | null;
           title: string;
@@ -35,6 +36,7 @@ export interface Database {
           owner_id: string;
           folder_id?: string | null;
           deleted_at?: string | null;
+          last_opened_at?: string | null;
           pinned_at?: string | null;
           thumbnail_path?: string | null;
           title?: string;
@@ -50,6 +52,7 @@ export interface Database {
           owner_id?: string;
           folder_id?: string | null;
           deleted_at?: string | null;
+          last_opened_at?: string | null;
           pinned_at?: string | null;
           thumbnail_path?: string | null;
           title?: string;

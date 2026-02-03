@@ -273,3 +273,16 @@ export async function updateNoteTags(noteId: string, tagIds: string[]) {
   const { error: insertError } = await supabase.from("note_tags").insert(inserts);
   if (insertError) throw new Error(`Failed to set tags: ${insertError.message}`);
 }
+
+export async function markNoteOpened(noteId: string) {
+  const { supabase, user } = await getUserIdOrRedirect();
+  const { error } = await supabase
+    .from("notes")
+    .update({ last_opened_at: new Date().toISOString() })
+    .eq("id", noteId)
+    .eq("owner_id", user.id)
+    .eq("is_deleted", false);
+  if (error) {
+    console.warn(`Failed to record last opened: ${error.message}`);
+  }
+}

@@ -43,6 +43,7 @@ export function NotesDashboard({ notes, folders, tags }: Props) {
   const [dialog, setDialog] = useState<DialogState>(null);
   const [folderNameInput, setFolderNameInput] = useState("");
   const [tagList, setTagList] = useState(tags);
+  const [sort, setSort] = useState<"updated" | "created" | "title" | "last_opened">("updated");
   const [toast, setToast] = useState<{ type: "error" | "success"; message: string } | null>(
     null,
   );
@@ -69,8 +70,31 @@ export function NotesDashboard({ notes, folders, tags }: Props) {
       });
     }
     if (!term) return next;
-    return next.filter((note) => note.title.toLowerCase().includes(term));
-  }, [notes, search, selectedFolder, selectedTags]);
+    next = next.filter((note) => note.title.toLowerCase().includes(term));
+
+    next = [...next].sort((a, b) => {
+      const aPinned = a.is_pinned ? 1 : 0;
+      const bPinned = b.is_pinned ? 1 : 0;
+      if (aPinned !== bPinned) return bPinned - aPinned;
+
+      switch (sort) {
+        case "title":
+          return a.title.localeCompare(b.title);
+        case "created":
+          return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+        case "last_opened": {
+          const aOpen = a.last_opened_at ? new Date(a.last_opened_at).getTime() : 0;
+          const bOpen = b.last_opened_at ? new Date(b.last_opened_at).getTime() : 0;
+          return bOpen - aOpen;
+        }
+        case "updated":
+        default:
+          return new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime();
+      }
+    });
+
+    return next;
+  }, [notes, search, selectedFolder, selectedTags, sort]);
 
   useEffect(() => {
     const bucket =
@@ -295,6 +319,18 @@ export function NotesDashboard({ notes, folders, tags }: Props) {
               onChange={(e) => setSearch(e.target.value)}
               className="w-full rounded-full border border-slate-200 bg-white px-4 py-2 text-sm shadow-sm outline-none ring-2 ring-transparent transition focus:border-slate-300 focus:ring-amber-200 sm:w-56"
             />
+            <select
+              value={sort}
+              onChange={(e) =>
+                setSort(e.target.value as "updated" | "created" | "title" | "last_opened")
+              }
+              className="rounded-full border border-slate-200 bg-white px-3 py-2 text-sm shadow-sm outline-none transition focus:border-amber-300"
+            >
+              <option value="updated">Last edited</option>
+              <option value="last_opened">Last opened</option>
+              <option value="created">Created (newest)</option>
+              <option value="title">Title A-Z</option>
+            </select>
             <div className="flex flex-wrap items-center gap-2">
               {tags.map((tag) => {
                 const active = selectedTags.includes(tag.id);
