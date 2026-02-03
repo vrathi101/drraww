@@ -20,6 +20,7 @@ import { useRouter } from "next/navigation";
 type Props = {
   notes: Note[];
   folders: Folder[];
+  tags: { id: string; name: string; color: string | null }[];
 };
 
 type DialogState =
@@ -27,13 +28,14 @@ type DialogState =
   | { type: "delete-folder"; folder: Folder }
   | null;
 
-export function NotesDashboard({ notes, folders }: Props) {
+export function NotesDashboard({ notes, folders, tags }: Props) {
   const router = useRouter();
   const { supabase } = useSupabase();
   const [search, setSearch] = useState("");
   const [isPending, startTransition] = useTransition();
   const [thumbnails, setThumbnails] = useState<Record<string, string>>({});
   const [selectedFolder, setSelectedFolder] = useState<string | null>(null);
+  const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [dialog, setDialog] = useState<DialogState>(null);
   const [folderNameInput, setFolderNameInput] = useState("");
   const [toast, setToast] = useState<{ type: "error" | "success"; message: string } | null>(
@@ -46,9 +48,18 @@ export function NotesDashboard({ notes, folders }: Props) {
     if (selectedFolder) {
       next = next.filter((n) => n.folder_id === selectedFolder);
     }
+    if (selectedTags.length > 0) {
+      next = next.filter((n) => {
+        const noteTagIds =
+          (n as Note & { note_tags?: { tag_id: string }[] }).note_tags?.map(
+            (t) => t.tag_id,
+          ) ?? [];
+        return selectedTags.every((tagId) => noteTagIds.includes(tagId));
+      });
+    }
     if (!term) return next;
     return next.filter((note) => note.title.toLowerCase().includes(term));
-  }, [notes, search, selectedFolder]);
+  }, [notes, search, selectedFolder, selectedTags]);
 
   useEffect(() => {
     const bucket =
@@ -121,6 +132,7 @@ export function NotesDashboard({ notes, folders }: Props) {
 
     startTransition(async () => {
       await deleteNoteAction(note.id);
+      setToast({ type: "success", message: "Moved to Trash" });
       router.refresh();
     });
   };
@@ -242,6 +254,39 @@ export function NotesDashboard({ notes, folders }: Props) {
               onChange={(e) => setSearch(e.target.value)}
               className="w-full rounded-full border border-slate-200 bg-white px-4 py-2 text-sm shadow-sm outline-none ring-2 ring-transparent transition focus:border-slate-300 focus:ring-amber-200 sm:w-56"
             />
+            <div className="flex flex-wrap items-center gap-2">
+              {tags.map((tag) => {
+                const active = selectedTags.includes(tag.id);
+                return (
+                  <button
+                    key={tag.id}
+                    type="button"
+                    onClick={() =>
+                      setSelectedTags((prev) =>
+                        active ? prev.filter((id) => id !== tag.id) : [...prev, tag.id],
+                      )
+                    }
+                    className={`rounded-full border px-3 py-1 text-xs font-semibold transition ${
+                      active
+                        ? "border-amber-300 bg-amber-100 text-amber-800"
+                        : "border-slate-200 bg-white text-slate-700 hover:border-slate-300"
+                    }`}
+                    style={tag.color ? { borderColor: tag.color, color: tag.color } : undefined}
+                  >
+                    {tag.name}
+                  </button>
+                );
+              })}
+              {selectedTags.length > 0 ? (
+                <button
+                  type="button"
+                  onClick={() => setSelectedTags([])}
+                  className="text-xs text-slate-500 hover:underline"
+                >
+                  Clear tags
+                </button>
+              ) : null}
+            </div>
             <button
               type="button"
               onClick={handleCreate}

@@ -11,6 +11,7 @@ export interface Database {
     Tables: {
       notes: {
         Row: {
+          archived_at: string | null;
           created_at: string;
           doc: Json;
           id: string;
@@ -19,13 +20,13 @@ export interface Database {
           owner_id: string;
           folder_id: string | null;
           deleted_at: string | null;
-          archived_at: string | null;
           pinned_at: string | null;
           thumbnail_path: string | null;
           title: string;
           updated_at: string;
         };
         Insert: {
+          archived_at?: string | null;
           created_at?: string;
           doc?: Json;
           id?: string;
@@ -34,13 +35,13 @@ export interface Database {
           owner_id: string;
           folder_id?: string | null;
           deleted_at?: string | null;
-          archived_at?: string | null;
           pinned_at?: string | null;
           thumbnail_path?: string | null;
           title?: string;
           updated_at?: string;
         };
         Update: {
+          archived_at?: string | null;
           created_at?: string;
           doc?: Json;
           id?: string;
@@ -49,7 +50,6 @@ export interface Database {
           owner_id?: string;
           folder_id?: string | null;
           deleted_at?: string | null;
-          archived_at?: string | null;
           pinned_at?: string | null;
           thumbnail_path?: string | null;
           title?: string;
@@ -137,6 +137,71 @@ export interface Database {
             foreignKeyName: "folders_owner_id_fkey";
             columns: ["owner_id"];
             referencedRelation: "users";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      tags: {
+        Row: {
+          color: string | null;
+          created_at: string;
+          id: string;
+          name: string;
+          owner_id: string;
+          updated_at: string;
+        };
+        Insert: {
+          color?: string | null;
+          created_at?: string;
+          id?: string;
+          name: string;
+          owner_id: string;
+          updated_at?: string;
+        };
+        Update: {
+          color?: string | null;
+          created_at?: string;
+          id?: string;
+          name?: string;
+          owner_id?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "tags_owner_id_fkey";
+            columns: ["owner_id"];
+            referencedRelation: "users";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      note_tags: {
+        Row: {
+          created_at: string;
+          note_id: string;
+          tag_id: string;
+        };
+        Insert: {
+          created_at?: string;
+          note_id: string;
+          tag_id: string;
+        };
+        Update: {
+          created_at?: string;
+          note_id?: string;
+          tag_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "note_tags_note_id_fkey";
+            columns: ["note_id"];
+            referencedRelation: "notes";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "note_tags_tag_id_fkey";
+            columns: ["tag_id"];
+            referencedRelation: "tags";
             referencedColumns: ["id"];
           },
         ];

@@ -23,7 +23,12 @@ export async function listNotes(folderId?: string): Promise<Note[]> {
 
   const { data, error } = await supabase
     .from("notes")
-    .select("*")
+    .select(
+      `
+      *,
+      note_tags:note_tags ( tag_id )
+    `,
+    )
     .eq("owner_id", user.id)
     .eq("is_deleted", false)
     .match(folderId ? { folder_id: folderId } : {})
@@ -35,7 +40,7 @@ export async function listNotes(folderId?: string): Promise<Note[]> {
     throw new Error(`Failed to load notes: ${error.message}`);
   }
 
-  return (data as Note[] | null) ?? [];
+  return (data as (Note & { note_tags?: { tag_id: string }[] })[] | null) ?? [];
 }
 
 export async function createNote(title = "Untitled"): Promise<string> {
