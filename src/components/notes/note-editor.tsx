@@ -693,6 +693,23 @@ function EditorShell({
   }, []);
 
   useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (!editorRef.current) return;
+      if (!hasDirtyChangesRef.current) return;
+      // Persist a local snapshot so we can recover after reload.
+      try {
+        persistLocal(editorRef.current.getSnapshot());
+      } catch {
+        // ignore
+      }
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+  }, [persistLocal]);
+
+  useEffect(() => {
     if (historyOpen && revisions.length === 0) {
       fetchRevisions();
     }
