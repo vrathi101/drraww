@@ -2,6 +2,16 @@ import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { randomUUID } from "crypto";
 
+const NOTE_QUOTA_BYTES = 25 * 1024 * 1024; // 25MB per note
+const USER_QUOTA_BYTES = 200 * 1024 * 1024; // 200MB per user
+const ALLOWED_MIME = new Set([
+  "image/png",
+  "image/jpeg",
+  "image/jpg",
+  "image/webp",
+  "image/gif",
+]);
+
 export async function POST(request: Request) {
   const supabase = createSupabaseServerClient();
   const {
@@ -25,6 +35,9 @@ export async function POST(request: Request) {
   if (!file.type || !file.type.startsWith("image/")) {
     return NextResponse.json({ error: "Only image uploads are supported" }, { status: 400 });
   }
+  if (!ALLOWED_MIME.has(file.type)) {
+    return NextResponse.json({ error: "Unsupported image type" }, { status: 400 });
+  }
 
   const { data: noteRow, error: noteError } = await supabase
     .from("notes")
@@ -35,6 +48,34 @@ export async function POST(request: Request) {
     .maybeSingle();
   if (noteError || !noteRow) {
     return NextResponse.json({ error: "Note not found" }, { status: 404 });
+  }
+
+  // Simple quota checks (note + user)
+  const { data: noteSizes } = await supabase
+    .from("note_attachments")
+    .select("size")
+    .eq("note_id", noteId)
+    .eq("owner_id", user.id);
+  const noteUsed =
+    noteSizes?.reduce((acc, row) => acc + Number(row.size ?? 0), 0) ?? 0;
+  if (noteUsed + file.size > NOTE_QUOTA_BYTES) {
+    return NextResponse.json(
+      { error: "Note attachments quota exceeded (25MB)" },
+      { status: 400 },
+    );
+  }
+
+  const { data: userSizes } = await supabase
+    .from("note_attachments")
+    .select("size")
+    .eq("owner_id", user.id);
+  const userUsed =
+    userSizes?.reduce((acc, row) => acc + Number(row.size ?? 0), 0) ?? 0;
+  if (userUsed + file.size > USER_QUOTA_BYTES) {
+    return NextResponse.json(
+      { error: "Account attachments quota exceeded (200MB)" },
+      { status: 400 },
+    );
   }
 
   const bucket = process.env.NEXT_PUBLIC_SUPABASE_ASSETS_BUCKET || "note-assets";
