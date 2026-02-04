@@ -54,6 +54,12 @@ type Revision = {
   doc: TLEditorSnapshot | TLStoreSnapshot | null;
 };
 
+type ConflictState = {
+  serverSnapshot?: TLEditorSnapshot | TLStoreSnapshot;
+  serverUpdatedAt: string;
+  pendingSnapshot: TLEditorSnapshot | TLStoreSnapshot;
+};
+
 export function NoteEditor({
   noteId,
   initialTitle,
@@ -233,6 +239,7 @@ function EditorShell({
   const [revisions, setRevisions] = useState<Revision[]>([]);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [historyLoading, setHistoryLoading] = useState(false);
+  const [conflict, setConflict] = useState<ConflictState | null>(null);
 
   const emitSaveStatus = useCallback(
     (status: SaveState, savedAt?: number) => {
@@ -481,17 +488,21 @@ function EditorShell({
       }
       const { data, error } = await query.select("updated_at").maybeSingle();
       if (error || !data?.updated_at) {
-        // Fallback: last-write-wins update if optimistic check failed.
-        const { data: overwriteData, error: overwriteError } = await supabase
+        const { data: latest, error: latestError } = await supabase
           .from("notes")
-          .update({ doc: snapshot as unknown as Json })
+          .select("doc, updated_at")
           .eq("id", noteId)
-          .select("updated_at")
-          .single();
-        if (overwriteError || !overwriteData?.updated_at) {
-          throw overwriteError || new Error("Failed to save note");
+          .maybeSingle();
+        if (latestError || !latest?.updated_at) {
+          throw latestError || new Error("Save conflict");
         }
-        baseUpdatedAtRef.current = overwriteData.updated_at;
+        setConflict({
+          serverSnapshot: coerceSnapshot(latest.doc),
+          serverUpdatedAt: latest.updated_at,
+          pendingSnapshot: snapshot,
+        });
+        emitSaveStatus("error");
+        return;
       } else {
         baseUpdatedAtRef.current = data.updated_at;
       }
@@ -633,6 +644,42 @@ function EditorShell({
     [persistLocal, saveNow],
   );
 
+  const handleConflictReload = useCallback(() => {
+    if (!conflict || !editorRef.current) return;
+    if (conflict.serverSnapshot) {
+      editorRef.current.loadSnapshot(conflict.serverSnapshot, { forceOverwriteSessionState: true });
+      persistLocal(editorRef.current.getSnapshot());
+    }
+    baseUpdatedAtRef.current = conflict.serverUpdatedAt;
+    hasDirtyChangesRef.current = false;
+    setConflict(null);
+    emitSaveStatus("saved", Date.now());
+  }, [conflict, emitSaveStatus, persistLocal]);
+
+  const handleConflictOverwrite = useCallback(async () => {
+    if (!conflict) return;
+    const { pendingSnapshot, serverSnapshot } = conflict;
+    try {
+      if (serverSnapshot) {
+        await insertRevision(serverSnapshot, "remote before overwrite");
+      }
+      const { data, error } = await supabase
+        .from("notes")
+        .update({ doc: pendingSnapshot as unknown as Json })
+        .eq("id", noteId)
+        .select("updated_at")
+        .single();
+      if (error || !data?.updated_at) throw error || new Error("Failed to overwrite");
+      baseUpdatedAtRef.current = data.updated_at;
+      hasDirtyChangesRef.current = false;
+      setConflict(null);
+      emitSaveStatus("saved", Date.now());
+    } catch (err) {
+      console.error("Overwrite failed", err);
+      emitSaveStatus("error");
+    }
+  }, [conflict, emitSaveStatus, insertRevision, noteId, supabase]);
+
   useEffect(() => {
     const updateOnline = () => setIsOnline(navigator.onLine);
     updateOnline();
@@ -752,6 +799,35 @@ function EditorShell({
               onClick={handleDiscardLocalDraft}
             >
               Dismiss
+            </button>
+          </div>
+        </div>
+      ) : null}
+      {conflict ? (
+        <div className="flex items-center justify-between gap-3 border-b border-rose-200 bg-rose-50 px-4 py-2 text-sm text-rose-800">
+          <div className="flex flex-col gap-1">
+            <div className="flex items-center gap-2">
+              <span className="h-2 w-2 rounded-full bg-rose-500" aria-hidden />
+              Another session updated this note at {formatAbsolute(conflict.serverUpdatedAt)}.
+            </div>
+            <p className="text-xs text-rose-700">
+              Choose to reload their version or overwrite with yours (we’ll keep a revision of theirs).
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={handleConflictReload}
+              className="rounded-full border border-rose-200 bg-white px-3 py-1 text-xs font-semibold text-rose-800 hover:border-rose-300"
+            >
+              Reload theirs
+            </button>
+            <button
+              type="button"
+              onClick={handleConflictOverwrite}
+              className="rounded-full border border-amber-300 bg-amber-600 px-3 py-1 text-xs font-semibold text-white shadow-sm hover:bg-amber-700"
+            >
+              Overwrite with mine
             </button>
           </div>
         </div>
@@ -1029,6 +1105,12 @@ function relativeTime(timestamp: number) {
   if (diffHr < 24) return `${diffHr}h ago`;
   const diffDays = Math.floor(diffHr / 24);
   return `${diffDays}d ago`;
+}
+
+function formatAbsolute(timestamp: string) {
+  const date = new Date(timestamp);
+  if (Number.isNaN(date.getTime())) return "unknown time";
+  return date.toLocaleString();
 }
 
 function coerceSnapshot(
