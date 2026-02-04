@@ -74,6 +74,7 @@ export function NotesDashboard({ notes, folders, tags }: Props) {
   const [newTagColor, setNewTagColor] = useState<string | null>(null);
   const [tagManagerOpen, setTagManagerOpen] = useState(false);
   const [editingTag, setEditingTag] = useState<{ id: string; name: string; color: string | null } | null>(null);
+  const [moveDialog, setMoveDialog] = useState<{ noteId: string; title: string; currentFolder: string | null } | null>(null);
   const searchRef = useRef<HTMLInputElement | null>(null);
   const breadcrumb = useMemo(() => buildBreadcrumb(selectedFolder, folders), [selectedFolder, folders]);
   const recents = useMemo(() => {
@@ -486,23 +487,26 @@ export function NotesDashboard({ notes, folders, tags }: Props) {
             <p className="text-xs text-slate-500">
               Updated {formatUpdatedAt(note.updated_at)}
             </p>
-            <div className="text-xs text-slate-600">
-              Folder:{" "}
-              <select
-                className="rounded border border-slate-200 bg-white px-2 py-1 text-xs"
-                value={note.folder_id ?? ""}
-                onChange={(e) =>
-                  handleMoveNote(note.id, e.target.value === "" ? null : e.target.value)
+            <div className="flex items-center gap-2 text-xs text-slate-600">
+              <span className="rounded-full bg-slate-100 px-2 py-0.5 font-semibold text-slate-700">
+                {note.folder_id
+                  ? folders.find((f) => f.id === note.folder_id)?.name ?? "Folder"
+                  : "Unfiled"}
+              </span>
+              <button
+                type="button"
+                onClick={() =>
+                  setMoveDialog({
+                    noteId: note.id,
+                    title: note.title || "Untitled",
+                    currentFolder: note.folder_id ?? null,
+                  })
                 }
+                className="rounded-full border border-slate-200 px-2 py-0.5 font-semibold text-slate-700 hover:border-slate-300"
                 disabled={isPending}
               >
-                <option value="">Unfiled</option>
-                {folders.map((f) => (
-                  <option key={f.id} value={f.id}>
-                    {f.name}
-                  </option>
-                ))}
-              </select>
+                Move
+              </button>
             </div>
             <div className="text-xs font-semibold text-amber-700">
               {note.is_pinned ? "Pinned" : ""}
@@ -1144,6 +1148,84 @@ export function NotesDashboard({ notes, folders, tags }: Props) {
           </div>
         </div>
       ) : null}
+      {moveDialog ? (
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40 px-4">
+          <div className="w-full max-w-md rounded-2xl bg-white p-5 shadow-2xl">
+            <div className="mb-3 flex items-center justify-between">
+              <div>
+                <h3 className="text-lg font-semibold text-slate-900">Move note</h3>
+                <p className="text-sm text-slate-600">
+                  Move <span className="font-semibold">{moveDialog.title}</span> to a folder.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setMoveDialog(null)}
+                className="text-slate-500 hover:text-slate-700"
+                aria-label="Close"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="max-h-[320px] space-y-2 overflow-y-auto pr-1">
+              <label className="flex items-center gap-2 rounded-xl border border-slate-200 px-3 py-2 text-sm">
+                <input
+                  type="radio"
+                  name="move-folder"
+                  checked={moveDialog.currentFolder === null}
+                  onChange={() => setMoveDialog({ ...moveDialog, currentFolder: null })}
+                />
+                <span className="font-semibold text-slate-800">Unfiled (All notes)</span>
+              </label>
+              {folders.map((folder) => (
+                <label
+                  key={folder.id}
+                  className="flex items-center gap-2 rounded-xl border border-slate-200 px-3 py-2 text-sm"
+                  style={{ paddingLeft: `${Math.min(24 + depthOfFolder(folder, folders) * 12, 48)}px` }}
+                >
+                  <input
+                    type="radio"
+                    name="move-folder"
+                    checked={moveDialog.currentFolder === folder.id}
+                    onChange={() =>
+                      setMoveDialog({
+                        ...moveDialog,
+                        currentFolder: folder.id,
+                      })
+                    }
+                  />
+                  <span className="font-semibold text-slate-800">{folder.name}</span>
+                </label>
+              ))}
+            </div>
+            <div className="mt-4 flex items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setMoveDialog(null)}
+                className="rounded-full border border-slate-200 px-3 py-1.5 text-sm font-medium text-slate-700 hover:border-slate-300"
+                disabled={isPending}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  startTransition(async () => {
+                    await moveNoteToFolderAction(moveDialog.noteId, moveDialog.currentFolder);
+                    setToast({ type: "success", message: "Note moved" });
+                    setMoveDialog(null);
+                    router.refresh();
+                  });
+                }}
+                className="rounded-full bg-amber-600 px-4 py-1.5 text-sm font-semibold text-white shadow-sm hover:bg-amber-700 disabled:opacity-60"
+                disabled={isPending}
+              >
+                Move
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
       {tagManagerOpen ? (
         <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40 px-4">
           <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl">
@@ -1344,4 +1426,17 @@ function getDescendantIds(folderId: string, folders: Folder[]): string[] {
     ids.push(...getDescendantIds(child.id, folders));
   });
   return ids;
+}
+
+function depthOfFolder(folder: Folder, folders: Folder[]) {
+  let depth = 0;
+  let current = folder;
+  const map = new Map(folders.map((f) => [f.id, f]));
+  const guard = new Set<string>();
+  while (current.parent_id && map.has(current.parent_id) && !guard.has(current.parent_id)) {
+    depth += 1;
+    guard.add(current.parent_id);
+    current = map.get(current.parent_id)!;
+  }
+  return depth;
 }
