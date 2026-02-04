@@ -205,6 +205,7 @@ function EditorShell({
   const debouncedSaveRef = useRef<NodeJS.Timeout | null>(null);
   const heartbeatRef = useRef<NodeJS.Timeout | null>(null);
   const hasDirtyChangesRef = useRef(false);
+  const changeCounterRef = useRef(0);
   const baseUpdatedAtRef = useRef<string | null>(initialUpdatedAt);
   const lastThumbnailMsRef = useRef(0);
   const lastRevisionMsRef = useRef(0);
@@ -508,6 +509,7 @@ function EditorShell({
         baseUpdatedAtRef.current = data.updated_at;
       }
       hasDirtyChangesRef.current = false;
+      changeCounterRef.current = 0;
       const savedAt = Date.now();
       emitSaveStatus("saved", savedAt);
       uploadThumbnail();
@@ -547,6 +549,11 @@ function EditorShell({
       const unsubscribe = editor.store.listen(
         () => {
           emitSaveStatus("idle");
+          changeCounterRef.current += 1;
+          if (changeCounterRef.current >= 200) {
+            insertRevision(editor.getSnapshot(), "activity checkpoint");
+            changeCounterRef.current = 0;
+          }
           scheduleSave();
         },
         { scope: "document", source: "user" },
@@ -564,7 +571,7 @@ function EditorShell({
         if (heartbeatRef.current) clearInterval(heartbeatRef.current);
       };
     },
-    [emitSaveStatus, initialSnapshot, persistLocal, restoreLocalIfNewer, saveNow, scheduleSave],
+    [emitSaveStatus, initialSnapshot, insertRevision, persistLocal, restoreLocalIfNewer, saveNow, scheduleSave],
   );
 
   const handleExport = useCallback(async () => {
@@ -572,6 +579,7 @@ function EditorShell({
     if (!editor) return;
     emitSaveStatus("saving");
     try {
+      await insertRevision(editor.getSnapshot(), "export png");
       const { blob } = await editor.toImage([], { format: "png", background: true, padding: 32 });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
@@ -584,13 +592,14 @@ function EditorShell({
       console.error("Export failed", err);
       emitSaveStatus("error");
     }
-  }, [emitSaveStatus]);
+  }, [emitSaveStatus, insertRevision]);
 
   const handleExportPdf = useCallback(async () => {
     const editor = editorRef.current;
     if (!editor) return;
     emitSaveStatus("saving");
     try {
+      await insertRevision(editor.getSnapshot(), "export pdf");
       const { blob, width, height } = await editor.toImage([], {
         format: "png",
         background: true,
@@ -615,7 +624,7 @@ function EditorShell({
       console.error("Export PDF failed", err);
       emitSaveStatus("error");
     }
-  }, [emitSaveStatus]);
+  }, [emitSaveStatus, insertRevision]);
 
   const handleRestoreLocalDraft = useCallback(() => {
     if (!localDraft || !editorRef.current) return;
