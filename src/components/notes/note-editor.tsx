@@ -214,6 +214,7 @@ function EditorShell({
   const [shareExpiry, setShareExpiry] = useState<"never" | "1d" | "7d">("7d");
   const [sharePassword, setSharePassword] = useState("");
   const [bulkPassword, setBulkPassword] = useState("");
+  const [shareError, setShareError] = useState<string | null>(null);
   const [saveStatus, setSaveStatus] = useState<SaveState>("saved");
   const [isOnline, setIsOnline] = useState(true);
   const [isUploading, setIsUploading] = useState(false);
@@ -943,10 +944,16 @@ function EditorShell({
                   Apply to all
                 </button>
               </div>
+              {shareError ? (
+                <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-700">
+                  {shareError}
+                </div>
+              ) : null}
               <button
                 type="button"
                 onClick={async () => {
                   try {
+                    setShareError(null);
                     const password = sharePassword.trim();
                     const { link } = await createShareAction(
                       noteId,
@@ -957,6 +964,7 @@ function EditorShell({
                     setShareLinks((prev) => [link, ...prev]);
                   } catch (err) {
                     console.error(err);
+                    setShareError("Could not create view link. Please try again.");
                   }
                 }}
                 className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-left text-sm font-semibold text-slate-800 shadow-sm hover:border-slate-300"
@@ -967,6 +975,7 @@ function EditorShell({
                 type="button"
                 onClick={async () => {
                   try {
+                    setShareError(null);
                     const password = sharePassword.trim();
                     const { link } = await createShareAction(
                       noteId,
@@ -977,6 +986,7 @@ function EditorShell({
                     setShareLinks((prev) => [link, ...prev]);
                   } catch (err) {
                     console.error(err);
+                    setShareError("Could not create edit link. Please try again.");
                   }
                 }}
                 className="w-full rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-left text-sm font-semibold text-amber-800 shadow-sm hover:border-amber-300"
@@ -1026,19 +1036,35 @@ function EditorShell({
                                 </span>
                               ) : null}
                             </span>
-                            <div className="flex items-center gap-2">
-                              <button
-                                type="button"
-                                onClick={() => navigator.clipboard.writeText(href)}
-                                className="rounded-full border border-slate-200 px-2 py-1 text-[11px] font-semibold text-slate-700 hover:border-slate-300"
-                              >
-                                Copy
-                              </button>
-                              <button
-                                type="button"
-                                onClick={async () => {
-                                  await revokeShareAction(link.id);
-                                  setShareLinks((prev) => prev.filter((l) => l.id !== link.id));
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => navigator.clipboard.writeText(href)}
+                      className="rounded-full border border-slate-200 px-2 py-1 text-[11px] font-semibold text-slate-700 hover:border-slate-300"
+                    >
+                      Copy
+                    </button>
+                    {link.password_hash ? (
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          const { share } = await updateSharePasswordAction(link.id, null);
+                          setShareLinks((prev) =>
+                            prev.map((l) =>
+                              l.id === link.id ? { ...l, password_hash: share.password_hash } : l,
+                            ),
+                          );
+                        }}
+                        className="rounded-full border border-slate-200 px-2 py-1 text-[11px] font-semibold text-slate-700 hover:border-slate-300"
+                      >
+                        Clear password
+                      </button>
+                    ) : null}
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        await revokeShareAction(link.id);
+                        setShareLinks((prev) => prev.filter((l) => l.id !== link.id));
                                 }}
                                 className="rounded-full border border-rose-200 px-2 py-1 text-[11px] font-semibold text-rose-700 hover:border-rose-300"
                               >
