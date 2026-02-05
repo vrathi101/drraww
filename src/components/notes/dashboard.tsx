@@ -482,7 +482,7 @@ export function NotesDashboard({ notes, folders, tags }: Props) {
     return (
       <article
         key={note.id}
-        className="group flex h-full flex-col justify-between overflow-hidden rounded-2xl border border-slate-200 bg-white/90 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
+        className="group flex h-full flex-col justify-between overflow-visible rounded-2xl border border-slate-200 bg-white/90 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
         draggable
         onDragStart={(e) => {
           e.dataTransfer.setData("text/note-id", note.id);
@@ -543,7 +543,7 @@ export function NotesDashboard({ notes, folders, tags }: Props) {
                 ⋯
               </button>
               {isMenuOpen ? (
-                <div className="absolute right-0 top-10 z-20 w-48 rounded-2xl border border-slate-200 bg-white p-1 text-sm shadow-xl">
+                <div className="absolute right-0 top-10 z-30 w-48 rounded-2xl border border-slate-200 bg-white p-1 text-sm shadow-xl">
                   <button
                     type="button"
                     onClick={() => {
