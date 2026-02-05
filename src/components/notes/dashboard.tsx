@@ -512,11 +512,11 @@ export function NotesDashboard({ notes, folders, tags }: Props) {
               {note.is_pinned ? "Pinned" : ""}
             </div>
           </div>
-          <div className="flex items-center gap-2 opacity-0 transition group-hover:opacity-100">
+          <div className="flex flex-wrap items-center gap-2">
             <button
               type="button"
               onClick={() => handleRename(note)}
-              className="rounded-full border border-slate-200 px-3 py-1 text-xs font-medium text-slate-700 hover:border-slate-400"
+              className="rounded-full border border-slate-200 px-2.5 py-1 text-[12px] font-medium text-slate-700 hover:border-slate-400"
               disabled={isPending}
             >
               Rename
@@ -524,7 +524,7 @@ export function NotesDashboard({ notes, folders, tags }: Props) {
             <button
               type="button"
               onClick={() => handleDelete(note)}
-              className="rounded-full border border-rose-200 px-3 py-1 text-xs font-semibold text-rose-700 hover:border-rose-400"
+              className="rounded-full border border-rose-200 px-2.5 py-1 text-[12px] font-semibold text-rose-700 hover:border-rose-400"
               disabled={isPending}
             >
               Delete
@@ -532,7 +532,7 @@ export function NotesDashboard({ notes, folders, tags }: Props) {
             <button
               type="button"
               onClick={() => handleArchive(note)}
-              className="rounded-full border border-slate-200 px-3 py-1 text-xs font-medium text-slate-700 hover:border-slate-400"
+              className="rounded-full border border-slate-200 px-2.5 py-1 text-[12px] font-medium text-slate-700 hover:border-slate-400"
               disabled={isPending}
             >
               Archive
@@ -567,7 +567,7 @@ export function NotesDashboard({ notes, folders, tags }: Props) {
                   router.refresh();
                 });
               }}
-              className="rounded-full border border-amber-200 px-3 py-1 text-xs font-semibold text-amber-700 hover:border-amber-400"
+              className="rounded-full border border-amber-200 px-2.5 py-1 text-[12px] font-semibold text-amber-700 hover:border-amber-400"
               disabled={isPending}
             >
               {note.is_pinned ? "Unpin" : "Pin"}
@@ -586,13 +586,26 @@ export function NotesDashboard({ notes, folders, tags }: Props) {
               const tagMeta = tagList.find((t) => t.id === tag.tag_id);
               if (!tagMeta) return null;
               return (
-                <span
+                <button
                   key={tag.tag_id}
-                  className="rounded-full border px-2 py-0.5 text-[11px] font-semibold text-slate-700"
+                  type="button"
+                  className="inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-semibold text-slate-700 hover:border-slate-400"
                   style={tagColorStyle(tagMeta.color)}
+                  onClick={() => {
+                    const remaining =
+                      (note as Note & { note_tags?: { tag_id: string }[] }).note_tags
+                        ?.map((t) => t.tag_id)
+                        .filter((id) => id !== tag.tag_id) ?? [];
+                    startTransition(async () => {
+                      await updateNoteTagsAction(note.id, remaining);
+                      setToast({ type: "success", message: "Tag removed" });
+                      router.refresh();
+                    });
+                  }}
                 >
                   {tagMeta.name}
-                </span>
+                  <span className="text-[10px] text-slate-500">✕</span>
+                </button>
               );
             })}
           </div>
