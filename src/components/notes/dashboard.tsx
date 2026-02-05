@@ -70,6 +70,11 @@ export function NotesDashboard({ notes, folders, tags }: Props) {
     title: string;
     selected: string[];
   } | null>(null);
+  const [noteDialog, setNoteDialog] = useState<{
+    type: "rename" | "delete" | "archive";
+    note: Note;
+  } | null>(null);
+  const [noteNameInput, setNoteNameInput] = useState("");
   const [newTagName, setNewTagName] = useState("");
   const [newTagColor, setNewTagColor] = useState<string | null>(null);
   const [tagManagerOpen, setTagManagerOpen] = useState(false);
@@ -197,6 +202,14 @@ export function NotesDashboard({ notes, folders, tags }: Props) {
     }
   }, [dialog, selectedFolder]);
 
+  useEffect(() => {
+    if (noteDialog?.type === "rename") {
+      setNoteNameInput(noteDialog.note.title ?? "");
+    } else {
+      setNoteNameInput("");
+    }
+  }, [noteDialog]);
+
   // Keyboard shortcuts for search (/ or Cmd/Ctrl+K)
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -240,37 +253,15 @@ export function NotesDashboard({ notes, folders, tags }: Props) {
   };
 
   const handleRename = (note: Note) => {
-    const next = prompt("Rename note", note.title);
-    if (!next || next.trim() === "" || next.trim() === note.title) return;
-
-    startTransition(async () => {
-      await renameNoteAction(note.id, next.trim());
-      setToast({ type: "success", message: "Note renamed" });
-      router.refresh();
-    });
+    setNoteDialog({ type: "rename", note });
   };
 
   const handleDelete = (note: Note) => {
-    const confirmDelete = confirm(
-      `Delete "${note.title}"? It will move to Trash.`,
-    );
-    if (!confirmDelete) return;
-
-    startTransition(async () => {
-      await deleteNoteAction(note.id);
-      setToast({ type: "success", message: "Moved to Trash" });
-      router.refresh();
-    });
+    setNoteDialog({ type: "delete", note });
   };
 
   const handleArchive = (note: Note) => {
-    const ok = confirm(`Archive "${note.title}"? It will be hidden from the main list.`);
-    if (!ok) return;
-    startTransition(async () => {
-      await archiveNoteAction(note.id);
-      setToast({ type: "success", message: "Note archived" });
-      router.refresh();
-    });
+    setNoteDialog({ type: "archive", note });
   };
 
   const handleCreateFolder = () => {
@@ -1070,6 +1061,133 @@ export function NotesDashboard({ notes, folders, tags }: Props) {
                 </div>
               </>
             ) : null}
+          </div>
+        </div>
+      ) : null}
+      {noteDialog ? (
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40 px-4">
+          <div className="w-full max-w-md rounded-2xl bg-white p-5 shadow-2xl">
+            {noteDialog.type === "rename" ? (
+              <>
+                <h3 className="text-lg font-semibold text-slate-900">Rename note</h3>
+                <p className="mt-1 text-sm text-slate-600">
+                  Update the title for{" "}
+                  <span className="font-semibold">{noteDialog.note.title || "Untitled"}</span>.
+                </p>
+                <form
+                  className="mt-4 flex flex-col gap-3"
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    const next = noteNameInput.trim();
+                    if (!next) {
+                      setToast({ type: "error", message: "Title cannot be empty" });
+                      return;
+                    }
+                    if (next === noteDialog.note.title) {
+                      setNoteDialog(null);
+                      return;
+                    }
+                    startTransition(async () => {
+                      await renameNoteAction(noteDialog.note.id, next);
+                      setToast({ type: "success", message: "Note renamed" });
+                      setNoteDialog(null);
+                      router.refresh();
+                    });
+                  }}
+                >
+                  <input
+                    autoFocus
+                    value={noteNameInput}
+                    onChange={(e) => setNoteNameInput(e.target.value)}
+                    className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm shadow-sm outline-none ring-2 ring-transparent transition focus:border-amber-300 focus:ring-amber-100"
+                    placeholder="Note title"
+                  />
+                  <div className="flex items-center justify-end gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setNoteDialog(null)}
+                      className="rounded-full border border-slate-200 px-3 py-1.5 text-sm font-medium text-slate-700 hover:border-slate-300"
+                      disabled={isPending}
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      className="rounded-full bg-amber-600 px-4 py-1.5 text-sm font-semibold text-white shadow-sm transition hover:bg-amber-700 disabled:opacity-60"
+                      disabled={isPending}
+                    >
+                      Save
+                    </button>
+                  </div>
+                </form>
+              </>
+            ) : noteDialog.type === "delete" ? (
+              <>
+                <h3 className="text-lg font-semibold text-slate-900">Move note to Trash</h3>
+                <p className="mt-2 text-sm text-slate-700">
+                  Delete <span className="font-semibold">{noteDialog.note.title || "Untitled"}</span>?
+                  You can restore it later from Trash.
+                </p>
+                <div className="mt-4 flex items-center justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setNoteDialog(null)}
+                    className="rounded-full border border-slate-200 px-3 py-1.5 text-sm font-medium text-slate-700 hover:border-slate-300"
+                    disabled={isPending}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      startTransition(async () => {
+                        await deleteNoteAction(noteDialog.note.id);
+                        setToast({ type: "success", message: "Moved to Trash" });
+                        setNoteDialog(null);
+                        router.refresh();
+                      });
+                    }}
+                    className="rounded-full bg-rose-600 px-4 py-1.5 text-sm font-semibold text-white shadow-sm transition hover:bg-rose-700 disabled:opacity-60"
+                    disabled={isPending}
+                  >
+                    Delete
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <h3 className="text-lg font-semibold text-slate-900">Archive note</h3>
+                <p className="mt-2 text-sm text-slate-700">
+                  Archive <span className="font-semibold">{noteDialog.note.title || "Untitled"}</span>?
+                  It will be hidden from the main list.
+                </p>
+                <div className="mt-4 flex items-center justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setNoteDialog(null)}
+                    className="rounded-full border border-slate-200 px-3 py-1.5 text-sm font-medium text-slate-700 hover:border-slate-300"
+                    disabled={isPending}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      startTransition(async () => {
+                        await archiveNoteAction(noteDialog.note.id);
+                        setToast({ type: "success", message: "Note archived" });
+                        setNoteDialog(null);
+                        router.refresh();
+                      });
+                    }}
+                    className="rounded-full bg-amber-600 px-4 py-1.5 text-sm font-semibold text-white shadow-sm transition hover:bg-amber-700 disabled:opacity-60"
+                    disabled={isPending}
+                  >
+                    Archive
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         </div>
       ) : null}
