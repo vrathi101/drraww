@@ -212,6 +212,13 @@ export function NotesDashboard({ notes, folders, tags }: Props) {
     }
   }, [noteDialog]);
 
+  useEffect(() => {
+    if (tagDialog || tagManagerOpen) {
+      setNewTagName("");
+      setNewTagColor(null);
+    }
+  }, [tagDialog, tagManagerOpen]);
+
   // Keyboard shortcuts for search (/ or Cmd/Ctrl+K)
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -795,47 +802,14 @@ export function NotesDashboard({ notes, folders, tags }: Props) {
                   </button>
                 );
               })}
-              <div className="flex items-center gap-2 rounded-full border border-dashed border-slate-300 px-3 py-1">
-                <input
-                  type="text"
-                  value={newTagName}
-                  onChange={(e) => setNewTagName(e.target.value)}
-                  placeholder="New tag"
-                  className="w-24 bg-transparent text-xs outline-none placeholder:text-slate-400"
-                />
-                <div className="flex items-center gap-1">
-                  {TAG_COLORS.map((color) => (
-                    <button
-                      key={color}
-                      type="button"
-                      onClick={() => setNewTagColor(color)}
-                      className={`h-4 w-4 rounded-full border ${
-                        newTagColor === color ? "border-slate-800 ring-2 ring-slate-300" : "border-slate-200"
-                      }`}
-                      style={{ backgroundColor: color }}
-                      aria-label={`Pick ${color}`}
-                    />
-                  ))}
-                </div>
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setTagManagerOpen(true)}
-                    className="text-xs text-slate-500 hover:text-slate-700"
-                    disabled={isPending}
-                  >
-                    Manage
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleCreateTag}
-                    className="text-xs font-semibold text-amber-700 hover:text-amber-800"
-                    disabled={isPending}
-                  >
-                    Add
-                  </button>
-                </div>
-              </div>
+              <button
+                type="button"
+                onClick={() => setTagManagerOpen(true)}
+                className="rounded-full border border-dashed border-slate-300 px-3 py-1 text-xs font-semibold text-slate-600 hover:border-slate-400"
+                disabled={isPending}
+              >
+                Manage tags
+              </button>
               {selectedTags.length > 0 ? (
                 <button
                   type="button"
@@ -1433,6 +1407,47 @@ export function NotesDashboard({ notes, folders, tags }: Props) {
               >
                 ✕
               </button>
+            </div>
+            <div className="mb-4 rounded-2xl border border-slate-200 p-4">
+              <h4 className="text-sm font-semibold text-slate-800">Create tag</h4>
+              <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center">
+                <input
+                  type="text"
+                  value={newTagName}
+                  onChange={(e) => setNewTagName(e.target.value)}
+                  className="w-full flex-1 rounded-xl border border-slate-200 px-3 py-2 text-sm shadow-sm outline-none ring-2 ring-transparent transition focus:border-amber-300 focus:ring-amber-100"
+                  placeholder="Tag name"
+                />
+                <div className="flex flex-wrap items-center gap-1">
+                  {TAG_COLORS.map((color) => (
+                    <button
+                      key={color}
+                      type="button"
+                      onClick={() => setNewTagColor(color)}
+                      className={`h-6 w-6 rounded-full border ${
+                        newTagColor === color ? "border-slate-800 ring-2 ring-slate-300" : "border-slate-200"
+                      }`}
+                      style={{ backgroundColor: color }}
+                      aria-label={`Pick ${color}`}
+                    />
+                  ))}
+                  <button
+                    type="button"
+                    onClick={() => setNewTagColor(null)}
+                    className="rounded-full border border-slate-200 px-2 py-1 text-xs text-slate-600 hover:border-slate-400"
+                  >
+                    Clear
+                  </button>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleCreateTag}
+                  className="rounded-full bg-amber-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-amber-700 disabled:opacity-60"
+                  disabled={isPending}
+                >
+                  Add tag
+                </button>
+              </div>
             </div>
             <div className="space-y-3 max-h-[320px] overflow-y-auto pr-1">
               {tagList.length === 0 ? (
