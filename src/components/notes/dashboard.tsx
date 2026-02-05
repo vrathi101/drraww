@@ -80,7 +80,9 @@ export function NotesDashboard({ notes, folders, tags }: Props) {
   const [tagManagerOpen, setTagManagerOpen] = useState(false);
   const [editingTag, setEditingTag] = useState<{ id: string; name: string; color: string | null } | null>(null);
   const [moveDialog, setMoveDialog] = useState<{ noteId: string; title: string; currentFolder: string | null } | null>(null);
+  const [openMenuNoteId, setOpenMenuNoteId] = useState<string | null>(null);
   const searchRef = useRef<HTMLInputElement | null>(null);
+  const menuRef = useRef<HTMLDivElement | null>(null);
   const breadcrumb = useMemo(() => buildBreadcrumb(selectedFolder, folders), [selectedFolder, folders]);
   const recents = useMemo(() => {
     const list = [...notes].sort((a, b) => {
@@ -225,6 +227,27 @@ export function NotesDashboard({ notes, folders, tags }: Props) {
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
   }, []);
+
+  useEffect(() => {
+    if (!openMenuNoteId) return;
+    const handleClick = (event: MouseEvent) => {
+      if (!menuRef.current) return;
+      if (!menuRef.current.contains(event.target as Node)) {
+        setOpenMenuNoteId(null);
+      }
+    };
+    const handleKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setOpenMenuNoteId(null);
+      }
+    };
+    document.addEventListener("mousedown", handleClick);
+    document.addEventListener("keydown", handleKey);
+    return () => {
+      document.removeEventListener("mousedown", handleClick);
+      document.removeEventListener("keydown", handleKey);
+    };
+  }, [openMenuNoteId]);
 
   // Persist tag filters between sessions
   useEffect(() => {
@@ -441,170 +464,207 @@ export function NotesDashboard({ notes, folders, tags }: Props) {
     });
   };
 
-  const renderNoteCard = (note: Note) => (
-    <article
-      key={note.id}
-      className="group flex h-full flex-col justify-between overflow-hidden rounded-2xl border border-slate-200 bg-white/90 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
-      draggable
-      onDragStart={(e) => {
-        e.dataTransfer.setData("text/note-id", note.id);
-        e.dataTransfer.effectAllowed = "move";
-      }}
-      onDragEnd={() => setDragOverFolder(null)}
-    >
-      <Link href={`/app/note/${note.id}`} className="block">
-        <div className="relative aspect-[4/3] w-full overflow-hidden bg-slate-100">
-          {thumbnails[note.thumbnail_path ?? ""] ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={thumbnails[note.thumbnail_path ?? ""]}
-              alt={`${note.title} thumbnail`}
-              className="h-full w-full object-cover transition duration-200 group-hover:scale-[1.01]"
-              loading="lazy"
-            />
-          ) : (
-            <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-amber-50 via-white to-sky-50 text-sm font-medium text-slate-500">
-              No preview yet
+  const renderNoteCard = (note: Note) => {
+    const noteTags =
+      (note as Note & { note_tags?: { tag_id: string }[] }).note_tags ?? [];
+    const folderName = note.folder_id
+      ? folders.find((f) => f.id === note.folder_id)?.name ?? "Folder"
+      : "Unfiled";
+    const isMenuOpen = openMenuNoteId === note.id;
+
+    return (
+      <article
+        key={note.id}
+        className="group flex h-full flex-col justify-between overflow-hidden rounded-2xl border border-slate-200 bg-white/90 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
+        draggable
+        onDragStart={(e) => {
+          e.dataTransfer.setData("text/note-id", note.id);
+          e.dataTransfer.effectAllowed = "move";
+        }}
+        onDragEnd={() => setDragOverFolder(null)}
+      >
+        <Link href={`/app/note/${note.id}`} className="block">
+          <div className="relative aspect-[4/3] w-full overflow-hidden bg-slate-100">
+            {thumbnails[note.thumbnail_path ?? ""] ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={thumbnails[note.thumbnail_path ?? ""]}
+                alt={`${note.title} thumbnail`}
+                className="h-full w-full object-cover transition duration-200 group-hover:scale-[1.01]"
+                loading="lazy"
+              />
+            ) : (
+              <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-amber-50 via-white to-sky-50 text-sm font-medium text-slate-500">
+                No preview yet
+              </div>
+            )}
+          </div>
+        </Link>
+        <div className="flex flex-1 flex-col gap-3 px-4 py-3">
+          <div className="flex items-start justify-between gap-3">
+            <div className="space-y-1">
+              <h2 className="line-clamp-1 text-lg font-semibold text-slate-900">
+                {note.title || "Untitled"}
+              </h2>
+              <p className="text-xs text-slate-500">
+                Updated {formatUpdatedAt(note.updated_at)}
+              </p>
+              <div className="flex flex-wrap items-center gap-2 text-xs text-slate-600">
+                <span className="rounded-full bg-slate-100 px-2 py-0.5 font-semibold text-slate-700">
+                  {folderName}
+                </span>
+                {note.is_pinned ? (
+                  <span className="rounded-full bg-amber-50 px-2 py-0.5 font-semibold text-amber-700">
+                    Pinned
+                  </span>
+                ) : null}
+              </div>
             </div>
-          )}
-        </div>
-      </Link>
-      <div className="flex flex-1 flex-col gap-3 px-4 py-3">
-        <div className="flex items-start justify-between gap-3">
-          <div className="space-y-1">
-            <h2 className="line-clamp-1 text-lg font-semibold text-slate-900">
-              {note.title || "Untitled"}
-            </h2>
-            <p className="text-xs text-slate-500">
-              Updated {formatUpdatedAt(note.updated_at)}
-            </p>
-            <div className="flex items-center gap-2 text-xs text-slate-600">
-              <span className="rounded-full bg-slate-100 px-2 py-0.5 font-semibold text-slate-700">
-                {note.folder_id
-                  ? folders.find((f) => f.id === note.folder_id)?.name ?? "Folder"
-                  : "Unfiled"}
-              </span>
+            <div
+              className="relative"
+              ref={(node) => {
+                if (isMenuOpen) menuRef.current = node;
+              }}
+            >
               <button
                 type="button"
-                onClick={() =>
-                  setMoveDialog({
-                    noteId: note.id,
-                    title: note.title || "Untitled",
-                    currentFolder: note.folder_id ?? null,
-                  })
-                }
-                className="rounded-full border border-slate-200 px-2 py-0.5 font-semibold text-slate-700 hover:border-slate-300"
+                onClick={() => setOpenMenuNoteId(isMenuOpen ? null : note.id)}
+                className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 text-lg text-slate-600 transition hover:bg-slate-100"
+                aria-label="Open actions"
                 disabled={isPending}
               >
-                Move
+                ⋯
               </button>
-            </div>
-            <div className="text-xs font-semibold text-amber-700">
-              {note.is_pinned ? "Pinned" : ""}
+              {isMenuOpen ? (
+                <div className="absolute right-0 top-10 z-20 w-48 rounded-2xl border border-slate-200 bg-white p-1 text-sm shadow-xl">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setOpenMenuNoteId(null);
+                      handleRename(note);
+                    }}
+                    className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-slate-700 hover:bg-slate-100"
+                    disabled={isPending}
+                  >
+                    Rename
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setOpenMenuNoteId(null);
+                      setMoveDialog({
+                        noteId: note.id,
+                        title: note.title || "Untitled",
+                        currentFolder: note.folder_id ?? null,
+                      });
+                    }}
+                    className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-slate-700 hover:bg-slate-100"
+                    disabled={isPending}
+                  >
+                    Move
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setOpenMenuNoteId(null);
+                      const selected = noteTags.map((t) => t.tag_id);
+                      setTagDialog({
+                        noteId: note.id,
+                        title: note.title || "Untitled",
+                        selected,
+                      });
+                    }}
+                    className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-slate-700 hover:bg-slate-100"
+                    disabled={isPending}
+                  >
+                    Manage tags
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setOpenMenuNoteId(null);
+                      startTransition(async () => {
+                        await togglePinNoteAction(note.id, !note.is_pinned);
+                        setToast({
+                          type: "success",
+                          message: note.is_pinned ? "Unpinned" : "Pinned",
+                        });
+                        router.refresh();
+                      });
+                    }}
+                    className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-slate-700 hover:bg-slate-100"
+                    disabled={isPending}
+                  >
+                    {note.is_pinned ? "Unpin" : "Pin"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setOpenMenuNoteId(null);
+                      handleArchive(note);
+                    }}
+                    className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-slate-700 hover:bg-slate-100"
+                    disabled={isPending}
+                  >
+                    Archive
+                  </button>
+                  <div className="my-1 h-px bg-slate-100" />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setOpenMenuNoteId(null);
+                      handleDelete(note);
+                    }}
+                    className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left font-semibold text-rose-600 hover:bg-rose-50"
+                    disabled={isPending}
+                  >
+                    Delete
+                  </button>
+                </div>
+              ) : null}
             </div>
           </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <button
-              type="button"
-              onClick={() => handleRename(note)}
-              className="rounded-full border border-slate-200 px-2.5 py-1 text-[12px] font-medium text-slate-700 hover:border-slate-400"
-              disabled={isPending}
+          <div className="mt-auto flex items-center justify-between gap-3">
+            <Link
+              href={`/app/note/${note.id}`}
+              className="inline-flex items-center gap-2 text-sm font-semibold text-amber-700 hover:text-amber-800"
             >
-              Rename
-            </button>
-            <button
-              type="button"
-              onClick={() => handleDelete(note)}
-              className="rounded-full border border-rose-200 px-2.5 py-1 text-[12px] font-semibold text-rose-700 hover:border-rose-400"
-              disabled={isPending}
-            >
-              Delete
-            </button>
-            <button
-              type="button"
-              onClick={() => handleArchive(note)}
-              className="rounded-full border border-slate-200 px-2.5 py-1 text-[12px] font-medium text-slate-700 hover:border-slate-400"
-              disabled={isPending}
-            >
-              Archive
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                const selected =
-                  (note as Note & { note_tags?: { tag_id: string }[] }).note_tags?.map(
-                    (t) => t.tag_id,
-                  ) ?? [];
-                setTagDialog({
-                  noteId: note.id,
-                  title: note.title || "Untitled",
-                  selected,
-                });
-              }}
-              className="rounded-full border border-slate-200 px-3 py-1 text-xs font-medium text-slate-700 hover:border-slate-400"
-              disabled={isPending}
-            >
-              Tags
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                startTransition(async () => {
-                  await togglePinNoteAction(note.id, !note.is_pinned);
-                  setToast({
-                    type: "success",
-                    message: note.is_pinned ? "Unpinned" : "Pinned",
-                  });
-                  router.refresh();
-                });
-              }}
-              className="rounded-full border border-amber-200 px-2.5 py-1 text-[12px] font-semibold text-amber-700 hover:border-amber-400"
-              disabled={isPending}
-            >
-              {note.is_pinned ? "Unpin" : "Pin"}
-            </button>
+              Open note →
+            </Link>
+            <div className="flex flex-wrap gap-1">
+              {noteTags.map((tag) => {
+                const tagMeta = tagList.find((t) => t.id === tag.tag_id);
+                if (!tagMeta) return null;
+                return (
+                  <button
+                    key={tag.tag_id}
+                    type="button"
+                    className="inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-semibold text-slate-700 hover:border-slate-400"
+                    style={tagColorStyle(tagMeta.color)}
+                    title={`Remove ${tagMeta.name}`}
+                    onClick={() => {
+                      const remaining = noteTags
+                        .map((t) => t.tag_id)
+                        .filter((id) => id !== tag.tag_id);
+                      startTransition(async () => {
+                        await updateNoteTagsAction(note.id, remaining);
+                        setToast({ type: "success", message: "Tag removed" });
+                        router.refresh();
+                      });
+                    }}
+                  >
+                    {tagMeta.name}
+                    <span className="text-[10px] text-slate-500">✕</span>
+                  </button>
+                );
+              })}
+            </div>
+            {isPending ? <span className="text-xs text-slate-500">Working...</span> : null}
           </div>
         </div>
-        <div className="mt-auto flex items-center justify-between gap-3">
-          <Link
-            href={`/app/note/${note.id}`}
-            className="inline-flex items-center gap-2 text-sm font-semibold text-amber-700 hover:text-amber-800"
-          >
-            Open note →
-          </Link>
-          <div className="flex flex-wrap gap-1">
-            {(note as Note & { note_tags?: { tag_id: string }[] }).note_tags?.map((tag) => {
-              const tagMeta = tagList.find((t) => t.id === tag.tag_id);
-              if (!tagMeta) return null;
-              return (
-                <button
-                  key={tag.tag_id}
-                  type="button"
-                  className="inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-semibold text-slate-700 hover:border-slate-400"
-                  style={tagColorStyle(tagMeta.color)}
-                  onClick={() => {
-                    const remaining =
-                      (note as Note & { note_tags?: { tag_id: string }[] }).note_tags
-                        ?.map((t) => t.tag_id)
-                        .filter((id) => id !== tag.tag_id) ?? [];
-                    startTransition(async () => {
-                      await updateNoteTagsAction(note.id, remaining);
-                      setToast({ type: "success", message: "Tag removed" });
-                      router.refresh();
-                    });
-                  }}
-                >
-                  {tagMeta.name}
-                  <span className="text-[10px] text-slate-500">✕</span>
-                </button>
-              );
-            })}
-          </div>
-          {isPending ? <span className="text-xs text-slate-500">Working...</span> : null}
-        </div>
-      </div>
-    </article>
-  );
+      </article>
+    );
+  };
 
   return (
     <div className="mx-auto flex max-w-7xl flex-col gap-6 px-4 pb-12 pt-6 lg:flex-row">
